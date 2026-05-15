@@ -113,10 +113,6 @@ class DroneAgent(mesa.Agent):
             if self.battery == BATTERY_CAPACITY:
                 self.vacate_station() # Clear the charger for other drones
             
-        elif self.state == STATE_IDLE:
-            # Under greedy coordination, drones seek their own tasks without a central manager
-            if self.model.coordination_type == "greedy":
-                self.behavior_greedy()
 
     def trigger_failure(self):
         """ Simulates a breakdown, requiring a re-assignment of any current tasks. """
@@ -263,34 +259,7 @@ class DroneAgent(mesa.Agent):
         if self.state == STATE_IDLE: 
             self.battery -= BATTERY_DRAIN_IDLE
 
-    def behavior_greedy(self):
-        """ Simple behavior: pick the nearest task that fits within carrying capacity. """
-        available_orders = self.model.order_manager.get_unassigned_orders()
-        if not available_orders: return
-        feasible_orders = [o for o in available_orders if o.weight <= self.capacity]
-        if not feasible_orders: return
 
-        best_order = min(feasible_orders, key=lambda o: self.calculate_distance(o.pickup_pos))
-        if self.model.order_manager.assign_order_specifically(self, best_order):
-            self.current_order = best_order
-            self.state = STATE_TO_PICKUP
-
-    def calculate_cnp_bid(self, mission):
-        """ Bid for the Contract Net Protocol based on distance, battery, and fitness. """
-        if self.current_order is not None:
-            return -1 # Already busy
-        if self.state != STATE_IDLE or self.battery < LOW_BATTERY_THRESHOLD:
-            return -1 # Not fit for work
-        if mission.weight > self.capacity:
-            return -1 # Task too heavy
-        
-        dist = self.calculate_distance(mission.pickup_pos)
-        # Score calculation: High battery is good, high distance is bad
-        base_score = (self.battery * 0.5) - (dist * 2.0)
-        wasted_space = self.capacity - mission.weight
-        penalty = wasted_space * 1.0 # Prefer drones whose capacity matches the weight
-        
-        return max(0, base_score - penalty)
 
     def calculate_auction_bid(self, mission):
         """ Bid for the Auction mechanism (lower is better, represents 'cost'). """
@@ -328,11 +297,8 @@ class MissionControlAgent(mesa.Agent):
         if not unassigned: 
             return
             
-        # Dispatch based on the model's global coordination setting
-        if self.model.coordination_type == "cnp": 
-            self.run_cnp_allocation(unassigned)
-        elif self.model.coordination_type == "auction": 
-            self.run_auction_allocation(unassigned)
+        # Dispatch using the sole allowed protocol: Auction
+        self.run_auction_allocation(unassigned)
 
     def handle_robot_failure(self, failed_robot, old_state):
         """ Rescue Logic: If a drone breaks, recover the medical supply and re-issue the task. """
@@ -385,25 +351,6 @@ class MissionControlAgent(mesa.Agent):
                 if isinstance(agent, DouarAgent): 
                     agent.color = highlight_color
 
-    def run_cnp_allocation(self, unassigned_orders):
-        """ Allocates tasks by awarding them to the agent with the highest bid. """
-        idle_robots = [a for a in self.model.schedule.agents 
-                      if isinstance(a, DroneAgent) and a.state == STATE_IDLE]
-        if not idle_robots: 
-            return
-            
-        for mission in unassigned_orders:
-            if not idle_robots:
-                break
-                
-            bids = {r: r.calculate_cnp_bid(mission) for r in idle_robots}
-            valid_bids = {r: s for r, s in bids.items() if s >= 0}
-            
-            if valid_bids:
-                winner = max(valid_bids, key=valid_bids.get)
-                if self.assign_order_specifically(winner, mission):
-                    print(f"🤝 CNP: Drone {winner.unique_id} won mission {mission.order_id}")
-                    idle_robots.remove(winner)
 
     def run_auction_allocation(self, unassigned_orders):
         """ Allocates tasks by awarding them to the agent with the lowest cost. """

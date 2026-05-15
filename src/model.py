@@ -28,9 +28,8 @@ class AirDwaModel(mesa.Model):
     The main airdwa simulation environment. Manages the grid, the schedule, 
     and handles global events like mission generation and fault injection.
     """
-    def __init__(self, coordination_type="cnp", n_robots=NUM_ROBOTS, order_rate=0.08, failure_step=-1, map_data=None):
+    def __init__(self, n_robots=NUM_ROBOTS, order_rate=0.08, failure_step=-1, map_data=None):
         super().__init__()
-        self.coordination_type = coordination_type # "greedy", "cnp", or "auction"
         self.num_robots = n_robots
         self.order_rate = order_rate
         self.running = True

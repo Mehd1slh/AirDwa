@@ -189,7 +189,6 @@ class AirDwaVisualizer:
         self.needs_step = True
         
         self.n_robots = 5
-        self.coordination = "cnp"
         self.animation_speed = 0.15
         self.grid_width = 20
         self.grid_height = 20
@@ -208,7 +207,6 @@ class AirDwaVisualizer:
 
         # Simulation Sidebar
         self.btn_back = Button(0, 0, 250, 40, "Return to Menu", self.return_to_menu, color=(100,100,100))
-        self.btn_mech = Button(0, 0, 250, 40, f"Mode: {self.coordination.upper()}", self.cycle_mechanism)
         self.btn_pause = Button(0, 0, 120, 40, "Pause/Play", self.toggle_pause)
         self.btn_reset = Button(0, 0, 120, 40, "Reset", self.reset_sim)
         self.btn_slower = Button(0, 0, 120, 40, "Slower", self.decrease_speed)
@@ -216,7 +214,7 @@ class AirDwaVisualizer:
         self.btn_fail = Button(0, 0, 250, 40, "FAIL RANDOM DRONE", self.trigger_fail, 
                                color=COLOR_BUTTON_ERROR, hover_color=COLOR_BUTTON_ERROR_HOVER)
         self.slider_robots = Slider(0, 0, 250, 1, 10, self.n_robots, "Drones")
-        self.sim_buttons = [self.btn_back, self.btn_mech, self.btn_pause, self.btn_reset, 
+        self.sim_buttons = [self.btn_back, self.btn_pause, self.btn_reset, 
                            self.btn_slower, self.btn_faster, self.btn_fail]
 
         # Editor Sidebar
@@ -246,7 +244,6 @@ class AirDwaVisualizer:
         
         # Simulation sidebar
         self.btn_back.rect.topleft = (bx, 100)
-        self.btn_mech.rect.topleft = (bx, 150)
         self.slider_robots.rect.topleft = (bx, 220)
         self.btn_pause.rect.topleft = (bx, 280)
         self.btn_reset.rect.topleft = (bx + 130, 280)
@@ -284,12 +281,6 @@ class AirDwaVisualizer:
         self.map_editor.cell_size = self.cell_size
 
     # --- STATE TRANSITIONS ---
-    
-    def cycle_mechanism(self):
-        modes = ["greedy", "cnp", "auction"]
-        self.coordination = modes[(modes.index(self.coordination) + 1) % len(modes)]
-        self.btn_mech.text = f"Mode: {self.coordination.upper()}"
-        self.reset_sim()
 
     def reset_sim(self): 
         self.launch_simulation()
@@ -343,7 +334,6 @@ class AirDwaVisualizer:
         self.n_robots = self.slider_robots.value
         self.model = AirDwaModel(
             n_robots=self.n_robots, 
-            coordination_type=self.coordination, 
             map_data=self.active_map_data
         )
         self.smooth_positions = {}

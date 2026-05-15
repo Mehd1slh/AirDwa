@@ -76,12 +76,7 @@ def agent_portrayal(agent):
 
 # Defines the sliders and dropdowns in the web sidebar to control simulation settings
 model_params = {
-    "coordination_type": {
-        "type": "Select",
-        "value": "cnp",
-        "values": ["greedy", "cnp", "auction"],
-        "label": "Coordination Mechanism",
-    },
+
     "n_robots": {
         "type": "SliderInt",
         "value": 3,
@@ -122,7 +117,7 @@ def ManualFaultControls(model):
 # --- SERVER PAGE INITIALIZATION ---
 
 # Create the initial model instance
-initial_model = AirDwaModel(n_robots=3, order_rate=0.1, coordination_type="cnp")
+initial_model = AirDwaModel(n_robots=3, order_rate=0.1)
 
 # Assemble the Solara visualization page
 page = SolaraViz(
