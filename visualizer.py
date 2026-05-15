@@ -6,16 +6,16 @@ import json
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from src.model import WarehouseModel
-from src.agents import RobotAgent, ShelfAgent, PackingStationAgent, ChargingStationAgent
+from src.model import AirDwaModel
+from src.agents import DroneAgent, PharmacyAgent, DouarAgent, DroneBaseAgent
 
 # Map Editor Constants
-TILE_TYPES = ["Shelf", "PackingStation", "ChargingStation", "Empty"]
+TILE_TYPES = ["Pharmacy", "Douar", "DroneBase", "Empty"]
 TILE_COLORS = {
-    "Shelf": (139, 69, 19), 
-    "PackingStation": (0, 0, 0), 
-    "ChargingStation": (255, 140, 0), 
-    "Empty": (200, 200, 200)
+    "Pharmacy": (46, 204, 113), # Medical Green for Pharmacy/Hospital
+    "Douar": (52, 152, 219), # Blue for Patient/Village
+    "DroneBase": (241, 196, 15), # Yellow for Drone Base
+    "Empty": (236, 240, 241)
 }
 
 # --- CONFIGURATION ---
@@ -49,7 +49,7 @@ class MapEditor:
         self.width = width
         self.height = height
         self.grid = [["Empty" for _ in range(height)] for _ in range(width)]
-        self.current_selection = "Shelf"
+        self.current_selection = "Pharmacy"
         self.cell_size = 30
         
     def handle_click(self, pos, offset_x, offset_y, right_click=False):
@@ -83,19 +83,19 @@ class MapEditor:
         data = {
             "width": self.width,
             "height": self.height,
-            "shelves": [],
-            "packing_stations": [],
-            "charging_stations": []
+            "pharmacies": [],
+            "douars": [],
+            "drone_bases": []
         }
         for x in range(self.width):
             for y in range(self.height):
                 tile = self.grid[x][y]
-                if tile == "Shelf": 
-                    data["shelves"].append([x, y])
-                elif tile == "PackingStation": 
-                    data["packing_stations"].append([x, y])
-                elif tile == "ChargingStation": 
-                    data["charging_stations"].append([x, y])
+                if tile == "Pharmacy": 
+                    data["pharmacies"].append([x, y])
+                elif tile == "Douar": 
+                    data["douars"].append([x, y])
+                elif tile == "DroneBase": 
+                    data["drone_bases"].append([x, y])
         
         os.makedirs("maps", exist_ok=True)
         filepath = f"maps/{filename}"
@@ -168,11 +168,11 @@ class Slider:
 
 # --- MAIN VISUALIZER ---
 
-class WarehouseVisualizer:
+class AirDwaVisualizer:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
-        pygame.display.set_caption("Smart Warehouse: Multi-Interface Center")
+        pygame.display.set_caption("AirDwa: Autonomous Swarm Rescue Simulation")
         self.clock = pygame.time.Clock()
         
         self.font_main = pygame.font.SysFont("Arial", 42, bold=True)
@@ -213,9 +213,9 @@ class WarehouseVisualizer:
         self.btn_reset = Button(0, 0, 120, 40, "Reset", self.reset_sim)
         self.btn_slower = Button(0, 0, 120, 40, "Slower", self.decrease_speed)
         self.btn_faster = Button(0, 0, 120, 40, "Faster", self.increase_speed)
-        self.btn_fail = Button(0, 0, 250, 40, "FAIL RANDOM ROBOT", self.trigger_fail, 
+        self.btn_fail = Button(0, 0, 250, 40, "FAIL RANDOM DRONE", self.trigger_fail, 
                                color=COLOR_BUTTON_ERROR, hover_color=COLOR_BUTTON_ERROR_HOVER)
-        self.slider_robots = Slider(0, 0, 250, 1, 10, self.n_robots, "Robots")
+        self.slider_robots = Slider(0, 0, 250, 1, 10, self.n_robots, "Drones")
         self.sim_buttons = [self.btn_back, self.btn_mech, self.btn_pause, self.btn_reset, 
                            self.btn_slower, self.btn_faster, self.btn_fail]
 
@@ -223,12 +223,12 @@ class WarehouseVisualizer:
         self.btn_editor_back = Button(0, 0, 250, 40, "Return to Menu", self.return_to_menu, color=(100,100,100))
         self.slider_width = Slider(0, 0, 250, 10, 50, self.grid_width, "Width")
         self.slider_height = Slider(0, 0, 250, 10, 50, self.grid_height, "Height")
-        self.btn_sel_shelf = Button(0, 0, 80, 40, "Shelf", self.set_tile, "Shelf", 
-                                    color=TILE_COLORS["Shelf"], hover_color=(169, 99, 49))
-        self.btn_sel_pack = Button(0, 0, 80, 40, "Pack", self.set_tile, "PackingStation", 
-                                   color=TILE_COLORS["PackingStation"], hover_color=(50, 50, 50))
-        self.btn_sel_charge = Button(0, 0, 80, 40, "Charge", self.set_tile, "ChargingStation", 
-                                     color=TILE_COLORS["ChargingStation"], hover_color=(255, 170, 30))
+        self.btn_sel_shelf = Button(0, 0, 80, 40, "Pharmacy", self.set_tile, "Pharmacy", 
+                                    color=TILE_COLORS["Pharmacy"], hover_color=(169, 99, 49))
+        self.btn_sel_pack = Button(0, 0, 80, 40, "Pack", self.set_tile, "Douar", 
+                                   color=TILE_COLORS["Douar"], hover_color=(50, 50, 50))
+        self.btn_sel_charge = Button(0, 0, 80, 40, "Charge", self.set_tile, "DroneBase", 
+                                     color=TILE_COLORS["DroneBase"], hover_color=(255, 170, 30))
         self.btn_clear_map = Button(0, 0, 250, 40, "Clear All", self.clear_map, color=(150, 50, 50))
         self.btn_launch = Button(0, 0, 250, 40, "Save and Launch", self.save_and_launch, color=COLOR_BUTTON_EDIT)
         self.editor_buttons = [self.btn_editor_back, self.btn_sel_shelf, self.btn_sel_pack, self.btn_sel_charge, 
@@ -325,7 +325,7 @@ class WarehouseVisualizer:
         self.launch_simulation()
 
     def load_saved_map(self):
-        path = "maps/custom_warehouse.json"
+        path = "maps/custom_airdwa.json"
         if os.path.exists(path):
             with open(path, "r") as f: 
                 self.active_map_data = json.load(f)
@@ -336,12 +336,12 @@ class WarehouseVisualizer:
 
     def save_and_launch(self):
         # Save the map and get the data
-        self.active_map_data = self.map_editor.save_map("custom_warehouse.json")
+        self.active_map_data = self.map_editor.save_map("custom_airdwa.json")
         self.launch_simulation()
 
     def launch_simulation(self):
         self.n_robots = self.slider_robots.value
-        self.model = WarehouseModel(
+        self.model = AirDwaModel(
             n_robots=self.n_robots, 
             coordination_type=self.coordination, 
             map_data=self.active_map_data
@@ -375,7 +375,7 @@ class WarehouseVisualizer:
 
     def draw_menu(self):
         self.screen.fill(COLOR_SIDEBAR)
-        title = self.font_main.render("Smart Warehouse Control", True, COLOR_TEXT_WHITE)
+        title = self.font_main.render("Smart AirDwa Control", True, COLOR_TEXT_WHITE)
         self.screen.blit(title, title.get_rect(center=(self.window_w // 2, 250)))
         
         subtitle = self.font_ui.render("Choose your simulation mode:", True, (200, 200, 200))
@@ -425,7 +425,7 @@ class WarehouseVisualizer:
             "Left Click: Place/Remove tile",
             "",
             "Add at least:",
-            "- Shelves (brown)",
+            "- Pharmacies (brown)",
             "- Packing Stations (black)",
             "- Charging Stations (orange)"
         ]
@@ -452,36 +452,36 @@ class WarehouseVisualizer:
                 for agent in cell_contents:
                     agent_type = type(agent).__name__
                     
-                    if agent_type == "ShelfAgent":
+                    if agent_type == "PharmacyAgent":
                         col = pygame.Color(getattr(agent, "color", "brown"))
                         pygame.draw.rect(self.screen, col, rect)
                         pygame.draw.rect(self.screen, (50, 50, 50), rect, 1)
-                    elif agent_type == "PackingStationAgent":
+                    elif agent_type == "DouarAgent":
                         col = pygame.Color(getattr(agent, "color", "black"))
                         pygame.draw.rect(self.screen, col, rect)
                         pygame.draw.rect(self.screen, (80, 80, 80), rect, 1)
-                    elif agent_type == "ChargingStationAgent":
+                    elif agent_type == "DroneBaseAgent":
                         pygame.draw.rect(self.screen, (255, 140, 0), rect)
                         pygame.draw.rect(self.screen, (200, 100, 0), rect, 2)
 
-        # Draw package weights
-        for order in self.model.order_manager.orders:
+        # Draw medical supply weights
+        for mission in self.model.order_manager.missions:
             show_weight = False
-            if order.assigned_to is None:
+            if mission.assigned_to is None:
                 show_weight = True
-            elif hasattr(order.assigned_to, 'state') and order.assigned_to.state == "TO_PICKUP":
+            elif hasattr(mission.assigned_to, 'state') and mission.assigned_to.state == "TO_PICKUP":
                 show_weight = True
             
             if show_weight:
-                ox, oy = order.pickup_pos
+                ox, oy = mission.pickup_pos
                 px = int(self.offset_x + ox * self.cell_size + self.cell_size/2)
                 py = int(self.offset_y + oy * self.cell_size + self.cell_size/2)
-                w_surf = self.font_tiny.render(str(order.weight), True, COLOR_TEXT_WHITE)
+                w_surf = self.font_tiny.render(str(mission.weight), True, COLOR_TEXT_WHITE)
                 w_rect = w_surf.get_rect(center=(px, py))
                 self.screen.blit(w_surf, w_rect)
 
-        # Draw robots with smooth animation
-        for agent in self.model.robot_agents:
+        # Draw drones with smooth animation
+        for agent in self.model.drone_agents:
             if agent.unique_id not in self.smooth_positions:
                 self.smooth_positions[agent.unique_id] = list(agent.pos)
             
@@ -499,7 +499,7 @@ class WarehouseVisualizer:
             px = int(self.offset_x + self.smooth_positions[agent.unique_id][0] * self.cell_size + self.cell_size/2)
             py = int(self.offset_y + self.smooth_positions[agent.unique_id][1] * self.cell_size + self.cell_size/2)
             
-            # Robot color based on state
+            # Drone color based on state
             col = (100, 100, 100)  # Grey default
             if agent.state == "FAILED": 
                 col = (255, 0, 0)
@@ -549,14 +549,14 @@ class WarehouseVisualizer:
         
         # Stats
         stats_y = 470
-        active_robots = len([r for r in self.model.robot_agents if r.state not in ['IDLE', 'FAILED']])
-        failed_robots = len([r for r in self.model.robot_agents if r.state == 'FAILED'])
+        active_robots = len([r for r in self.model.drone_agents if r.state not in ['IDLE', 'FAILED']])
+        failed_robots = len([r for r in self.model.drone_agents if r.state == 'FAILED'])
         
         stats = [
             f"Speed: {int(self.animation_speed * 100)}%",
-            f"Orders Done: {self.model.order_manager.completed_orders}",
-            f"Active Robots: {active_robots}",
-            f"Failed Robots: {failed_robots}"
+            f"Missions Done: {self.model.order_manager.completed_orders}",
+            f"Active Drones: {active_robots}",
+            f"Failed Drones: {failed_robots}"
         ]
         for line in stats:
             surf = self.font_ui.render(line, True, COLOR_TEXT_WHITE)
@@ -564,9 +564,9 @@ class WarehouseVisualizer:
             stats_y += 30
 
     def update_robot_positions(self):
-        """Returns True when all robots have reached their targets"""
+        """Returns True when all drones have reached their targets"""
         all_arrived = True
-        for agent in self.model.robot_agents:
+        for agent in self.model.drone_agents:
             tx, ty = agent.pos
             if agent.unique_id not in self.smooth_positions:
                 self.smooth_positions[agent.unique_id] = [tx, ty]
@@ -655,5 +655,5 @@ class WarehouseVisualizer:
         pygame.quit()
         
 if __name__ == "__main__":
-    viz = WarehouseVisualizer()
+    viz = AirDwaVisualizer()
     viz.run()

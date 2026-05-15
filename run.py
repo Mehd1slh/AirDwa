@@ -9,12 +9,12 @@ if __name__ == "__main__":
         print(f"Error: Could not find {server_file}")
         sys.exit(1)
 
-    print("Launching Multi-Robot Delivery System via Solara...")
+    print("Launching Multi-Drone Delivery System via Solara...")
     print(f"Target: {server_file}")
     
     
     try:
         # shell=True to find the 'solara' command on winows
-        subprocess.run(["solara", "run", server_file], shell=True, check=True)
+        subprocess.run(["solara", "run", server_file], check=True)
     except KeyboardInterrupt:
         print("\nServer stopped.")
