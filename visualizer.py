@@ -7,15 +7,15 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from src.model import AirDwaModel
-from src.agents import DroneAgent, PharmacyAgent, DouarAgent, DroneBaseAgent
+from src.agents import DroneAgent, HealthFacilityAgent, DouarAgent, ChargingStationAgent, ObstacleAgent
 
-# Map Editor Constants
-TILE_TYPES = ["Pharmacy", "Douar", "DroneBase", "Obstacle", "Empty"]
+# Map Editor Constants aligned with model.py
+TILE_TYPES = ["HealthFacility", "Douar", "ChargingStation", "Obstacle", "Empty"]
 TILE_COLORS = {
-    "Pharmacy": (46, 204, 113), 
-    "Douar": (52, 152, 219), 
-    "DroneBase": (241, 196, 15), 
-    "Obstacle": (128, 128, 128), # Gray for mountains/hard terrain
+    "HealthFacility": (46, 204, 113),  # Green
+    "Douar": (52, 152, 219),           # Blue
+    "ChargingStation": (241, 196, 15), # Yellow/Orange
+    "Obstacle": (128, 128, 128),       # Gray
     "Empty": (236, 240, 241)
 }
 
@@ -50,8 +50,8 @@ class MapEditor:
         self.width = width
         self.height = height
         self.grid = [["Empty" for _ in range(height)] for _ in range(width)]
-        self.current_selection = "Pharmacy"
-        self.cell_size = 30
+        self.current_selection = "HealthFacility"
+        self.cell_size = 100
         
     def handle_click(self, pos, offset_x, offset_y, right_click=False):
         grid_x = (pos[0] - offset_x) // self.cell_size
@@ -61,21 +61,16 @@ class MapEditor:
             if right_click:
                 self.grid[grid_x][grid_y] = "Empty"
             else:
-                # Toggle: if clicking same tile type, remove it
                 if self.grid[grid_x][grid_y] == self.current_selection:
                     self.grid[grid_x][grid_y] = "Empty"
                 else:
                     self.grid[grid_x][grid_y] = self.current_selection
     
     def resize_grid(self, new_width, new_height):
-        """Resize the grid, preserving existing tiles where possible"""
         new_grid = [["Empty" for _ in range(new_height)] for _ in range(new_width)]
-        
-        # Copy existing tiles that fit in new dimensions
         for x in range(min(self.width, new_width)):
             for y in range(min(self.height, new_height)):
                 new_grid[x][y] = self.grid[x][y]
-        
         self.width = new_width
         self.height = new_height
         self.grid = new_grid
@@ -84,20 +79,20 @@ class MapEditor:
         data = {
             "width": self.width,
             "height": self.height,
-            "pharmacies": [],
+            "pharmacies": [], 
             "douars": [],
-            "drone_bases": [],
-            "obstacles": [] # Added obstacles array
+            "telecom_stations": [], 
+            "obstacles": []
         }
         for x in range(self.width):
             for y in range(self.height):
                 tile = self.grid[x][y]
-                if tile == "Pharmacy": 
+                if tile == "HealthFacility": 
                     data["pharmacies"].append([x, y])
                 elif tile == "Douar": 
                     data["douars"].append([x, y])
-                elif tile == "DroneBase": 
-                    data["drone_bases"].append([x, y])
+                elif tile == "ChargingStation": 
+                    data["telecom_stations"].append([x, y])
                 elif tile == "Obstacle": 
                     data["obstacles"].append([x, y])
         
@@ -221,22 +216,22 @@ class AirDwaVisualizer:
         self.sim_buttons = [self.btn_back, self.btn_pause, self.btn_reset, 
                            self.btn_slower, self.btn_faster, self.btn_fail]
 
-        # Editor Sidebar - Updated Layout
+        # Editor Sidebar
         self.btn_editor_back = Button(0, 0, 250, 40, "Return to Menu", self.return_to_menu, color=(100,100,100))
-        self.slider_width = Slider(0, 0, 250, 10, 50, self.grid_width, "Width")
-        self.slider_height = Slider(0, 0, 250, 10, 50, self.grid_height, "Height")
+        self.slider_width = Slider(0, 0, 250, 10, 100, self.grid_width, "Width")
+        self.slider_height = Slider(0, 0, 250, 10, 100, self.grid_height, "Height")
         
-        # Row 1 buttons
-        self.btn_sel_shelf = Button(0, 0, 80, 40, "Pharmacy", self.set_tile, "Pharmacy", color=TILE_COLORS["Pharmacy"])
-        self.btn_sel_pack = Button(0, 0, 80, 40, "Pack", self.set_tile, "Douar", color=TILE_COLORS["Douar"])
-        self.btn_sel_charge = Button(0, 0, 80, 40, "Charge", self.set_tile, "DroneBase", color=TILE_COLORS["DroneBase"])
+        # Row 1
+        self.btn_sel_health = Button(0, 0, 80, 40, "Health", self.set_tile, "HealthFacility", color=TILE_COLORS["HealthFacility"])
+        self.btn_sel_douar = Button(0, 0, 80, 40, "Douar", self.set_tile, "Douar", color=TILE_COLORS["Douar"])
+        self.btn_sel_charge = Button(0, 0, 80, 40, "Charge", self.set_tile, "ChargingStation", color=TILE_COLORS["ChargingStation"])
         
-        # Row 2 buttons (New Obstacle Button)
+        # Row 2
         self.btn_sel_obs = Button(0, 0, 120, 40, "Obstacle", self.set_tile, "Obstacle", color=TILE_COLORS["Obstacle"])
         self.btn_clear_map = Button(0, 0, 120, 40, "Clear All", self.clear_map, color=(150, 50, 50))
         
         self.btn_launch = Button(0, 0, 250, 40, "Save and Launch", self.save_and_launch, color=COLOR_BUTTON_EDIT)
-        self.editor_buttons = [self.btn_editor_back, self.btn_sel_shelf, self.btn_sel_pack, self.btn_sel_charge, 
+        self.editor_buttons = [self.btn_editor_back, self.btn_sel_health, self.btn_sel_douar, self.btn_sel_charge, 
                               self.btn_sel_obs, self.btn_clear_map, self.btn_launch]
 
     def update_layout(self, w, h):
@@ -244,12 +239,10 @@ class AirDwaVisualizer:
         mid_x = w // 2
         bx = w - SIDEBAR_WIDTH + 25
         
-        # Menu buttons
         self.btn_new_map.rect.topleft = (mid_x - 150, 400)
         self.btn_default_map.rect.topleft = (mid_x - 150, 480)
         self.btn_load_saved.rect.topleft = (mid_x - 150, 560)
         
-        # Simulation sidebar
         self.btn_back.rect.topleft = (bx, 100)
         self.slider_robots.rect.topleft = (bx, 220)
         self.btn_pause.rect.topleft = (bx, 280)
@@ -258,24 +251,19 @@ class AirDwaVisualizer:
         self.btn_faster.rect.topleft = (bx + 130, 330)
         self.btn_fail.rect.topleft = (bx, 390)
         
-        # Editor sidebar (Adjusted coordinates for the new rows)
         self.btn_editor_back.rect.topleft = (bx, 140)
         self.slider_width.rect.topleft = (bx, 200)
         self.slider_height.rect.topleft = (bx, 260)
         
-        # Row 1
-        self.btn_sel_shelf.rect.topleft = (bx, 330)
-        self.btn_sel_pack.rect.topleft = (bx + 85, 330)
+        self.btn_sel_health.rect.topleft = (bx, 330)
+        self.btn_sel_douar.rect.topleft = (bx + 85, 330)
         self.btn_sel_charge.rect.topleft = (bx + 170, 330)
         
-        # Row 2
         self.btn_sel_obs.rect.topleft = (bx, 380)
         self.btn_clear_map.rect.topleft = (bx + 130, 380)
         
-        # Bottom
         self.btn_launch.rect.topleft = (bx, 440)
 
-        # Calculate grid layout
         if self.state == STATE_MENU:
             return
             
@@ -285,11 +273,13 @@ class AirDwaVisualizer:
         else:
             grid_w = self.map_editor.width
             grid_h = self.map_editor.height
+            
         available_width = w - (SIDEBAR_WIDTH if self.state != STATE_MENU else 0)
         
         scale_x = available_width // grid_w
         scale_y = h // grid_h
         self.cell_size = min(scale_x, scale_y)
+        if self.cell_size < 1: self.cell_size = 1
         
         grid_pixel_width = self.cell_size * grid_w
         grid_pixel_height = self.cell_size * grid_h
@@ -298,37 +288,22 @@ class AirDwaVisualizer:
         self.offset_y = (h - grid_pixel_height) // 2
         self.map_editor.cell_size = self.cell_size
 
-    # --- STATE TRANSITIONS ---
-
-    def reset_sim(self): 
-        self.launch_simulation()
-        
+    def reset_sim(self): self.launch_simulation()
     def enter_editor(self): 
         self.state = STATE_EDITOR
         self.update_layout(self.window_w, self.window_h)
-        
     def return_to_menu(self): 
         self.state = STATE_MENU
         self.paused = True
         self.update_layout(self.window_w, self.window_h)
-        
-    def toggle_pause(self): 
-        self.paused = not self.paused
-        
-    def set_tile(self, ttype): 
-        self.map_editor.current_selection = ttype
-        
+    def toggle_pause(self): self.paused = not self.paused
+    def set_tile(self, ttype): self.map_editor.current_selection = ttype
     def clear_map(self):
         w = self.map_editor.width
         h = self.map_editor.height
         self.map_editor.grid = [["Empty" for _ in range(h)] for _ in range(w)]
-        
-    def decrease_speed(self):
-        self.animation_speed = max(0.01, self.animation_speed - 0.05)
-        
-    def increase_speed(self):
-        self.animation_speed = min(1.0, self.animation_speed + 0.05)
-
+    def decrease_speed(self): self.animation_speed = max(0.01, self.animation_speed - 0.05)
+    def increase_speed(self): self.animation_speed = min(1.0, self.animation_speed + 0.05)
     def start_with_default(self):
         self.active_map_data = None
         self.launch_simulation()
@@ -344,7 +319,6 @@ class AirDwaVisualizer:
             print(f"❌ No saved map found at {path}")
 
     def save_and_launch(self):
-        # Save the map and get the data
         self.active_map_data = self.map_editor.save_map("custom_airdwa.json")
         self.launch_simulation()
 
@@ -361,13 +335,11 @@ class AirDwaVisualizer:
         self.update_layout(self.window_w, self.window_h)
 
     def trigger_fail(self):
-        if self.model: 
-            self.model.fail_random_robot()
-
-    # --- DRAWING UTILITIES ---
+        if self.model: self.model.fail_random_robot()
 
     def draw_grid_lines(self):
-        # 1. Grab dimensions based on state
+        if self.cell_size < 4: return
+        
         if self.state == STATE_SIMULATION and self.model:
             grid_w = self.model.grid.width
             grid_h = self.model.grid.height
@@ -375,11 +347,9 @@ class AirDwaVisualizer:
             grid_w = self.map_editor.width
             grid_h = self.map_editor.height
         
-        # 2. THESE MUST BE ALIGNED WITH THE "if" and "else", NOT INDENTED INSIDE THEM
         gw_pixels = grid_w * self.cell_size
         gh_pixels = grid_h * self.cell_size
         
-        # 3. Draw grid
         for x in range(grid_w + 1):
             px = self.offset_x + x * self.cell_size
             pygame.draw.line(self.screen, COLOR_GRID, (px, self.offset_y), (px, self.offset_y + gh_pixels))
@@ -388,100 +358,83 @@ class AirDwaVisualizer:
             py = self.offset_y + y * self.cell_size
             pygame.draw.line(self.screen, COLOR_GRID, (self.offset_x, py), (self.offset_x + gw_pixels, py))
 
-    # --- STATE-SPECIFIC DRAWING ---
-
     def draw_menu(self):
         self.screen.fill(COLOR_SIDEBAR)
         title = self.font_main.render("Smart AirDwa Control", True, COLOR_TEXT_WHITE)
         self.screen.blit(title, title.get_rect(center=(self.window_w // 2, 250)))
-        
         subtitle = self.font_ui.render("Choose your simulation mode:", True, (200, 200, 200))
         self.screen.blit(subtitle, subtitle.get_rect(center=(self.window_w // 2, 330)))
-        
-        for b in self.menu_buttons: 
-            b.draw(self.screen, self.font_ui)
+        for b in self.menu_buttons: b.draw(self.screen, self.font_ui)
 
     def draw_editor(self):
         self.screen.fill(COLOR_BG)
         self.draw_grid_lines()
         
-        # Draw tiles
+        render_size = max(16, self.cell_size) # Fixed UI Size
+        
         for x in range(self.map_editor.width):
             for y in range(self.map_editor.height):
                 tile = self.map_editor.grid[x][y]
                 if tile != "Empty":
-                    rect = (self.offset_x + x*self.cell_size, self.offset_y + y*self.cell_size, 
-                           self.cell_size, self.cell_size)
-                    pygame.draw.rect(self.screen, TILE_COLORS[tile], rect)
-                    pygame.draw.rect(self.screen, (50, 50, 50), rect, 1)
+                    if tile == "Obstacle":
+                        rect = (self.offset_x + x*self.cell_size, self.offset_y + y*self.cell_size, self.cell_size, self.cell_size)
+                        pygame.draw.rect(self.screen, TILE_COLORS[tile], rect)
+                        if self.cell_size > 4:
+                            pygame.draw.rect(self.screen, (100, 100, 100), rect, 1)
+                    else:
+                        cx = self.offset_x + x * self.cell_size + self.cell_size / 2
+                        cy = self.offset_y + y * self.cell_size + self.cell_size / 2
+                        rect = (cx - render_size/2, cy - render_size/2, render_size, render_size)
+                        pygame.draw.rect(self.screen, TILE_COLORS[tile], rect)
+                        pygame.draw.rect(self.screen, (50, 50, 50), rect, 2)
         
-        # Sidebar
         sidebar_rect = pygame.Rect(self.window_w - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, self.window_h)
         pygame.draw.rect(self.screen, COLOR_SIDEBAR, sidebar_rect)
         
         title = self.font_title.render("Map Designer", True, COLOR_TEXT_WHITE)
         self.screen.blit(title, (self.window_w - SIDEBAR_WIDTH + 25, 40))
-        
-        # Current selection indicator
-        sel_text = f"Selected: {self.map_editor.current_selection}"
-        sel_surf = self.font_ui.render(sel_text, True, COLOR_TEXT_WHITE)
+        sel_surf = self.font_ui.render(f"Selected: {self.map_editor.current_selection}", True, COLOR_TEXT_WHITE)
         self.screen.blit(sel_surf, (self.window_w - SIDEBAR_WIDTH + 25, 90))
-        
-        # Grid size info
-        size_text = f"Grid: {self.map_editor.width}x{self.map_editor.height}"
-        size_surf = self.font_ui.render(size_text, True, (200, 200, 200))
+        size_surf = self.font_ui.render(f"Grid: {self.map_editor.width}x{self.map_editor.height}", True, (200, 200, 200))
         self.screen.blit(size_surf, (self.window_w - SIDEBAR_WIDTH + 25, 115))
         
-        # Draw sliders
         self.slider_width.draw(self.screen, self.font_ui)
         self.slider_height.draw(self.screen, self.font_ui)
         
-        # Instructions
-        inst_y = 520
-        instructions = [
-            "Left Click: Place/Remove tile",
-            "",
-            "Add at least:",
-            "- Pharmacies (brown)",
-            "- Packing Stations (black)",
-            "- Charging Stations (orange)"
-        ]
-        for line in instructions:
-            surf = self.font_ui.render(line, True, (200, 200, 200))
-            self.screen.blit(surf, (self.window_w - SIDEBAR_WIDTH + 25, inst_y))
-            inst_y += 25
-        
-        # Draw all editor buttons
-        for b in self.editor_buttons: 
-            b.draw(self.screen, self.font_ui)
+        for b in self.editor_buttons: b.draw(self.screen, self.font_ui)
 
     def draw_simulation(self):
         self.screen.fill(COLOR_BG)
         self.draw_grid_lines()
-        
-        # Draw static agents - FIXED: Draw on all cells, checking agent type by class name
+
+        render_size = max(16, self.cell_size)  # Keep key spots visible
+        drone_radius = max(8, int(self.cell_size/2.5)) # Keep drones visible
+
+        # Draw static agents
         for x in range(self.model.grid.width):
             for y in range(self.model.grid.height):
                 cell_contents = self.model.grid.get_cell_list_contents((x, y))
-                rect = (self.offset_x + x*self.cell_size, self.offset_y + y*self.cell_size, self.cell_size, self.cell_size)
+                
+                cx = self.offset_x + x * self.cell_size + self.cell_size / 2
+                cy = self.offset_y + y * self.cell_size + self.cell_size / 2
+                fixed_rect = (cx - render_size/2, cy - render_size/2, render_size, render_size)
                 
                 for agent in cell_contents:
                     agent_type = type(agent).__name__
                     
-                    if agent_type == "PharmacyAgent":
-                        col = pygame.Color(getattr(agent, "color", "brown"))
-                        pygame.draw.rect(self.screen, col, rect)
-                        pygame.draw.rect(self.screen, (50, 50, 50), rect, 1)
+                    if agent_type == "HealthFacilityAgent":
+                        pygame.draw.rect(self.screen, TILE_COLORS["HealthFacility"], fixed_rect)
+                        pygame.draw.rect(self.screen, (30, 150, 80), fixed_rect, max(1, int(render_size/8)))
                     elif agent_type == "DouarAgent":
-                        col = pygame.Color(getattr(agent, "color", "black"))
-                        pygame.draw.rect(self.screen, col, rect)
-                        pygame.draw.rect(self.screen, (80, 80, 80), rect, 1)
-                    elif agent_type == "DroneBaseAgent":
-                        pygame.draw.rect(self.screen, (255, 140, 0), rect)
-                        pygame.draw.rect(self.screen, (200, 100, 0), rect, 2)
-                    elif agent_type == "ObstacleAgent": # ADD THIS BLOCK
-                        pygame.draw.rect(self.screen, (128, 128, 128), rect)
-                        pygame.draw.rect(self.screen, (100, 100, 100), rect, 1)
+                        pygame.draw.rect(self.screen, TILE_COLORS["Douar"], fixed_rect)
+                        pygame.draw.rect(self.screen, (40, 120, 180), fixed_rect, max(1, int(render_size/8)))
+                    elif agent_type == "ChargingStationAgent":
+                        pygame.draw.rect(self.screen, TILE_COLORS["ChargingStation"], fixed_rect)
+                        pygame.draw.rect(self.screen, (200, 150, 10), fixed_rect, max(1, int(render_size/8)))
+                    elif agent_type == "ObstacleAgent": 
+                        obs_rect = (self.offset_x + x*self.cell_size, self.offset_y + y*self.cell_size, self.cell_size, self.cell_size)
+                        pygame.draw.rect(self.screen, TILE_COLORS["Obstacle"], obs_rect)
+                        if self.cell_size > 4: pygame.draw.rect(self.screen, (100, 100, 100), obs_rect, 1)
 
         # Draw medical supply weights
         for mission in self.model.order_manager.missions:
@@ -495,8 +448,11 @@ class AirDwaVisualizer:
                 ox, oy = mission.pickup_pos
                 px = int(self.offset_x + ox * self.cell_size + self.cell_size/2)
                 py = int(self.offset_y + oy * self.cell_size + self.cell_size/2)
+                
                 w_surf = self.font_tiny.render(str(mission.weight), True, COLOR_TEXT_WHITE)
                 w_rect = w_surf.get_rect(center=(px, py))
+                bg_rect = w_rect.inflate(4, 4)
+                pygame.draw.rect(self.screen, (0, 0, 0, 150), bg_rect, border_radius=2)
                 self.screen.blit(w_surf, w_rect)
 
         # Draw drones with smooth animation
@@ -507,7 +463,6 @@ class AirDwaVisualizer:
             sx, sy = self.smooth_positions[agent.unique_id]
             tx, ty = agent.pos
             
-            # Smooth interpolation
             dx, dy = tx - sx, ty - sy
             if abs(dx) < 0.01 and abs(dy) < 0.01:
                 self.smooth_positions[agent.unique_id] = [tx, ty]
@@ -518,37 +473,22 @@ class AirDwaVisualizer:
             px = int(self.offset_x + self.smooth_positions[agent.unique_id][0] * self.cell_size + self.cell_size/2)
             py = int(self.offset_y + self.smooth_positions[agent.unique_id][1] * self.cell_size + self.cell_size/2)
             
-            # Drone color based on state
-            col = (100, 100, 100)  # Grey default
-            if agent.state == "FAILED": 
-                col = (255, 0, 0)
-            elif agent.battery < 20: 
-                col = (255, 255, 0)
-            elif agent.state == "TO_DELIVER": 
-                col = (0, 200, 0)
-            elif agent.state == "TO_PICKUP": 
-                col = (0, 0, 255)
-            elif agent.state == "CHARGING": 
-                col = (255, 165, 0)
-            elif agent.state == "TO_CHARGE": 
-                col = (255, 140, 0)
+            col = (100, 100, 100)
+            if agent.state == "FAILED": col = (255, 0, 0)
+            elif agent.battery < 20: col = (255, 255, 0)
+            elif agent.state == "TO_DELIVER": col = (0, 200, 0)
+            elif agent.state == "TO_PICKUP": col = (0, 0, 255)
+            elif agent.state == "CHARGING": col = (255, 165, 0)
+            elif agent.state == "TO_CHARGE": col = (255, 140, 0)
             
-            radius = int(self.cell_size/2.5)
-            pygame.draw.circle(self.screen, col, (px, py), radius)
+            pygame.draw.circle(self.screen, col, (px, py), drone_radius)
+            pygame.draw.circle(self.screen, (0,0,0), (px, py), drone_radius, 1)
             
-            # Capacity label
-            cap_text = str(agent.capacity)
-            text_col = COLOR_TEXT_WHITE if agent.state in ["TO_PICKUP", "FAILED"] else COLOR_TEXT_BLACK
-            cap_surf = self.font_tiny.render(cap_text, True, text_col)
-            cap_rect = cap_surf.get_rect(center=(px, py))
-            self.screen.blit(cap_surf, cap_rect)
-            
-            # Battery bar
-            bar_w = self.cell_size - 4
+            bar_w = drone_radius * 2
             bar_h = 4
             fill = (agent.battery/100) * bar_w
-            pygame.draw.rect(self.screen, (50, 50, 50), (px-bar_w//2, py-radius-6, bar_w, bar_h))
-            pygame.draw.rect(self.screen, (0, 255, 0), (px-bar_w//2, py-radius-6, fill, bar_h))
+            pygame.draw.rect(self.screen, (50, 50, 50), (px-bar_w//2, py-drone_radius-6, bar_w, bar_h))
+            pygame.draw.rect(self.screen, (0, 255, 0), (px-bar_w//2, py-drone_radius-6, fill, bar_h))
 
         # Sidebar
         sidebar_rect = pygame.Rect(self.window_w - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, self.window_h)
@@ -562,11 +502,9 @@ class AirDwaVisualizer:
         status_surf = self.font_ui.render(f"Status: {status}", True, col)
         self.screen.blit(status_surf, (self.window_w - SIDEBAR_WIDTH + 25, 60))
         
-        for b in self.sim_buttons: 
-            b.draw(self.screen, self.font_ui)
+        for b in self.sim_buttons: b.draw(self.screen, self.font_ui)
         self.slider_robots.draw(self.screen, self.font_ui)
         
-        # Stats
         stats_y = 470
         active_robots = len([r for r in self.model.drone_agents if r.state not in ['IDLE', 'FAILED']])
         failed_robots = len([r for r in self.model.drone_agents if r.state == 'FAILED'])
@@ -583,7 +521,6 @@ class AirDwaVisualizer:
             stats_y += 30
 
     def update_robot_positions(self):
-        """Returns True when all drones have reached their targets"""
         all_arrived = True
         for agent in self.model.drone_agents:
             tx, ty = agent.pos
@@ -597,8 +534,6 @@ class AirDwaVisualizer:
                 all_arrived = False
         return all_arrived
 
-    # --- MAIN LOOP ---
-
     def run(self):
         running = True
         while running:
@@ -611,17 +546,13 @@ class AirDwaVisualizer:
                 if event.type == pygame.VIDEORESIZE: 
                     self.update_layout(event.w, event.h)
                 
-                # Handle events based on state
                 if self.state == STATE_MENU:
-                    for b in self.menu_buttons: 
-                        b.handle_event(event)
+                    for b in self.menu_buttons: b.handle_event(event)
                         
                 elif self.state == STATE_EDITOR:
                     if event.type == pygame.MOUSEBUTTONDOWN:
                         self.map_editor.handle_click(mpos, self.offset_x, self.offset_y, event.button == 3)
-                    for b in self.editor_buttons: 
-                        b.handle_event(event)
-                    # Handle grid size sliders
+                    for b in self.editor_buttons: b.handle_event(event)
                     if self.slider_width.handle_event(event):
                         if self.grid_width != self.slider_width.value:
                             self.grid_width = self.slider_width.value
@@ -634,25 +565,19 @@ class AirDwaVisualizer:
                             self.update_layout(self.window_w, self.window_h)
                         
                 elif self.state == STATE_SIMULATION:
-                    for b in self.sim_buttons: 
-                        b.handle_event(event)
+                    for b in self.sim_buttons: b.handle_event(event)
                     if self.slider_robots.handle_event(event):
                         if self.n_robots != self.slider_robots.value:
                             self.n_robots = self.slider_robots.value
                             self.reset_sim()
 
-            # Update hover states
             if self.state == STATE_MENU:
-                for b in self.menu_buttons: 
-                    b.check_hover(mpos)
+                for b in self.menu_buttons: b.check_hover(mpos)
             elif self.state == STATE_EDITOR:
-                for b in self.editor_buttons: 
-                    b.check_hover(mpos)
+                for b in self.editor_buttons: b.check_hover(mpos)
             elif self.state == STATE_SIMULATION:
-                for b in self.sim_buttons: 
-                    b.check_hover(mpos)
+                for b in self.sim_buttons: b.check_hover(mpos)
 
-            # Simulation logic
             if self.state == STATE_SIMULATION and not self.paused:
                 if self.needs_step:
                     self.model.step()
@@ -660,13 +585,9 @@ class AirDwaVisualizer:
                 if self.update_robot_positions():
                     self.needs_step = True
 
-            # Render current state
-            if self.state == STATE_MENU: 
-                self.draw_menu()
-            elif self.state == STATE_EDITOR: 
-                self.draw_editor()
-            elif self.state == STATE_SIMULATION:
-                self.draw_simulation()
+            if self.state == STATE_MENU: self.draw_menu()
+            elif self.state == STATE_EDITOR: self.draw_editor()
+            elif self.state == STATE_SIMULATION: self.draw_simulation()
             
             pygame.display.flip()
             self.clock.tick(FPS)
