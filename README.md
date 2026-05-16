@@ -1,110 +1,61 @@
-<h1 align="center">Multi-Robot Delivery Coordination </h1>
-
-<p align="center">
-  <img src="Capture d'écran 2026-01-11 174001.png" alt="Warehouse Simulation Overview" width="800">
-</p>
-
-## 1. Project Overview
-This project simulates a **Multi-Agent System (MAS)** for autonomous warehouse logistics using the **Mesa** framework. The research focuses on comparing three coordination mechanisms: **Greedy, Contract Net Protocol (CNP), and Auction**, to evaluate their efficiency, workload fairness, and ability to recover from unexpected robot failures.
-
-## 2. Key Features
-* **Three Coordination Modes:** Switch between decentralized Greedy logic, manager-led CNP, or a complex Auction-based cost function.
-* **Custom Map Designer:** Integrated GUI to build your own warehouse layouts (Shelves, Packing, and Charging stations).
-* **Real-time Monitoring:** Dual-interface support with live graphing of Throughput, Battery levels, and Gini Coefficient (fairness).
-* **Dynamic Failure & Rescue System:** Automatic detection of robot failures with a specialized "Rescue" protocol that re-allocates dropped packages to active robots.
-* **Energy Management:** Advanced battery decay logic based on movement and idle states, featuring autonomous recharging cycles.
-* **A star Pathfinding:** Intelligent navigation that treats shelves and failed robots as obstacles.
-
-## 3. Project Structure
-```text
-C:.
-│   map_editor.py        # Logic for creating and saving custom grid layouts
-│   run.py               # Launcher for the Solara/Mesa Web Dashboard
-│   visualizer.py        # Main Pygame GUI (Menu, Map Editor, and Simulation)
-│   requirements.txt     # Project dependencies
-│
-├───expirements
-│       analysis.ipynb    # Data analysis and visualization of benchmark results
-│       benchmark.py      # Automated script for batch-running scenarios
-│       simulation_results.csv
-│
-├───maps
-│       custom_warehouse.json # Saved layout exported from the editor
-│
-└───src
-    │   __init__.py      # Package initialization and class exposure
-    │   agents.py        # Behavior logic for Robots, Managers, and Stations
-    │   model.py         # The Mesa Model and data collection infrastructure
-    │   server.py        # Web-based visualization configuration (Solara)
-```
-
-## 4.  Experimental Results & Conclusions
-Based on the simulation analysis, we observed the following performance trends:
-
-| Metric | Winner | Conclusion |
-| :--- | :--- | :--- |
-| **Throughput** | **Greedy** | Best raw speed but suffers from high performance variance. |
-| **Fairness** | **CNP** | Lowest Gini coefficient, ensuring equitable workload distribution. |
-| **Resilience** | **Auction** | Superior recovery slope post-failure with efficient task re-allocation. |
-| **Sustainability** | **Auction** | Highest average battery levels (65.6%) via cost-aware bidding. |
-
-### Key Takeaway
-While **Greedy** is effective for raw speed in simple scenarios, **Auction-based coordination** is the superior choice for high-scale, resilient warehouses as it balances energy preservation with reliable recovery from failures.
-
-## 🛠️ Installation & Setup
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/Mehd1slh/Multi-Robot-Delivery-Coordination.git
-   cd Multi-Robot-Delivery-Coordination
-2. **Create and activate a virtual environment:**
-   ```bash
-   python -m venv venv
-   # Windows:
-   .\venv\Scripts\activate
-   # Mac/Linux:
-   source venv/bin/activate
-   ````
-
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ````
-## Usage
-The project offers multiple ways to interact with the simulation, ranging from a custom map designer to advanced real-time monitoring.
-1. **Option A: Pygame Interface (Editor & Simulation)**
-   Recommended for designing maps and watching smooth robot movements.
-    ```bash
-   python visualizer.py
-    ````
----
-2. **Option B: Web Dashboard (Solara)**
-   Recommended for real-time performance monitoring and data graphing.
-    ```bash
-   python run.py
-    ````
----
-3. **Option C: Benchmarking**
-   To run batch comparisons of all three coordination mechanisms:
-    ```bash
-   python expirements/benchmark.py --steps 200 --runs 10
-    ````
----
+# AirDwa (أير-دوا): Voice-Activated Drone Medical Dispatch
 
 
 
-<h3 align="center">With profound gratitude for the wisdom and guidance of</h3>
-<h2 align="center">DR. AHMADOUN Douae</h2>
-<p align="center">A mentor who transforms knowledge into enlightenment and ignites our passion for learning</p>
+**1. Project Overview** In the mountainous and rural regions of Morocco, rugged terrain and poorly maintained roads create severe barriers to healthcare. A sudden emergency can become fatal simply because of geographical isolation.
 
---- 
+**AirDwa** democratizes emergency healthcare access by deploying a decentralized, Multi-Agent Drone Logistics System. Driven by an advanced Auction-based AI allocation algorithm and triggered seamlessly via a Darija Voice Assistant, AirDwa guarantees that critical medical supplies reach patients in remote douars in minutes, bypassing topographical obstacles entirely.
 
-<p align="center">
-  <img src="Capture d'écran 2026-01-11 175343.png" alt="Project Image" width="600">
-</p>
-<p align="center">
-  <em>15 January, 2026 • Wednesday</em>
-</p>
+**2. Key Features**
 
+- **Darija Voice Activation (ASR & LLM):** A zero-tech-literacy interface. Users speak naturally in Darija (e.g., "Khassna dwa dyal skhana..."). The system uses a fine-tuned Whisper model combined with a local LLM to extract the medical intent and destination.
+    
+- **Real-World Map Auto-Generation:** A custom map builder that pulls data from OpenStreetMap and OpenTopography. Select a bounding box anywhere in Morocco, and the system automatically maps pharmacies, telecom towers (for charging), and impassable high-altitude terrain into the simulation grid.
+    
+- **Auction-Based Dispatch Protocol:** Drones bid on missions based on a complex cost function prioritizing battery preservation, flight distance, and payload urgency.
+    
+- **Patient-First Rescue Protocol:** If a drone suffers a critical failure mid-flight, the central dispatcher abandons the crashed payload and instantly orders a fresh supply from the nearest hospital via a new drone, ensuring the patient is always the priority.
+    
+- **Telecom Tower Recharging:** Utilizes existing telecom infrastructure in rural areas as mid-flight charging pads to keep the fleet sustainable.
+    
 
+**3. Project Structure**
 
+- `app.py`: Streamlit UI for the Automated Custom Map Builder.
+    
+- `demo.py`: Main global system launcher bridging ASR and Simulation.
+    
+- `requirements.txt`: Project dependencies.
+    
+- `asr/`: Contains Darija ASR transcription, NLP extraction rules, and Voice command processing via Whisper and local LLMs.
+    
+- `map_build/`: OSM and OpenTopography BBox generation scripts.
+    
+- `pygame/`: Logic for manual grid layout editing and the main Pygame GUI for real-time simulation monitoring.
+    
+- `maps/`: Saved custom simulation layouts.
+    
+- `src/`: Behavior logic for Drones, Dispatcher, Infrastructure, the Mesa Model, and Solara visualization configuration.
+    
+
+**4. Installation & Setup**
+
+1. Clone the repository and navigate to the directory.
+    
+2. Create and activate a virtual environment (`python -m venv venv`).
+    
+3. Install dependencies using `pip install -r requirements.txt`.
+    
+4. Set up Environment Variables: Ensure you have your OpenTopography API key for map generation. Create a `.env` file in the root directory with `OPENTOPOGRAPHY_KEY=your_api_key_here`.
+    
+
+**5. Usage** The project offers multiple interfaces for the demo:
+
+- **Option A: Generate a Custom Simulation Map (Streamlit)** Use the interactive map to select a Bounding Box in Morocco and generate the grid constraints. Run `streamlit run app.py`.
+    
+- **Option B: Full Voice-to-Drone Global Demo (Gradio + Mesa)** Launch the unified demo where you can speak in Darija and watch the order inject into the running Mesa simulation. Run `python demo.py`.
+    
+- **Option C: Pygame Real-Time Visualizer** Recommended for watching smooth drone pathfinding, obstacle avoidance, and mechanical failure recoveries. Run `python pygame/visualizer.py`.
+    
+
+**Team** EL MAHRAOUI Amal, SALIH El Mehdi, AKCHOUCH Abdelhakim, AIT EL MOUDEN Khaoula.
