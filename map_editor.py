@@ -4,14 +4,14 @@ import os
 
 # --- Configuration Constants ---
 
-# Available tile types that can be placed in the warehouse grid
-TILE_TYPES = ["Shelf", "PackingStation", "ChargingStation", "Empty"]
+# Available tile types that can be placed in the airdwa grid
+TILE_TYPES = ["Pharmacy", "Douar", "DroneBase", "Empty"]
 
 # Visual representation colors for the editor grid
 COLORS = {
-    "Shelf": (139, 69, 19),           # Brown
-    "PackingStation": (0, 0, 0),      # Black
-    "ChargingStation": (255, 140, 0), # Orange
+    "Pharmacy": (139, 69, 19),           # Brown
+    "Douar": (0, 0, 0),      # Black
+    "DroneBase": (255, 140, 0), # Orange
     "Empty": (200, 200, 200)          # Grey (for background grid)
 }
 
@@ -26,7 +26,7 @@ class MapEditor:
         # Initialize the grid as a 2D array filled with "Empty" tiles
         self.grid = [[ "Empty" for _ in range(height)] for _ in range(width)]
         # Default tile type to place on left-click
-        self.current_selection = "Shelf"
+        self.current_selection = "Pharmacy"
         # Pixel size of each cell for coordinate translation
         self.cell_size = 30
         
@@ -49,27 +49,27 @@ class MapEditor:
 
     def save_map(self, filename="custom_map.json"):
         """
-        Exports the grid layout to a JSON format that the WarehouseModel can parse.
+        Exports the grid layout to a JSON format that the AirDwaModel can parse.
         """
         # Dictionary structure to store coordinates of each object type
         data = {
             "width": self.width,
             "height": self.height,
-            "shelves": [],
-            "packing_stations": [],
-            "charging_stations": []
+            "pharmacies": [],
+            "douars": [],
+            "drone_bases": []
         }
 
         # Iterate through the grid and collect coordinates for each agent type
         for x in range(self.width):
             for y in range(self.height):
                 tile = self.grid[x][y]
-                if tile == "Shelf": 
-                    data["shelves"].append([x, y])
-                elif tile == "PackingStation": 
-                    data["packing_stations"].append([x, y])
-                elif tile == "ChargingStation": 
-                    data["charging_stations"].append([x, y])
+                if tile == "Pharmacy": 
+                    data["pharmacies"].append([x, y])
+                elif tile == "Douar": 
+                    data["douars"].append([x, y])
+                elif tile == "DroneBase": 
+                    data["drone_bases"].append([x, y])
         
         # Ensure the 'maps' directory exists before saving
         os.makedirs("maps", exist_ok=True)

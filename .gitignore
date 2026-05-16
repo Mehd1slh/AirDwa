@@ -1,3 +1,3 @@
-/model_checkpoints
+.venv/
 /.gradio
 /pretrained_models
