@@ -149,6 +149,10 @@ class AirDwaModel(mesa.Model):
             return False
             
         cell_contents = self.grid.get_cell_list_contents(pos)
+        
+        # Check if the position is a Douar station
+        is_douar = any(isinstance(a, DouarAgent) for a in cell_contents)
+        
         for agent in cell_contents:
             if isinstance(agent, ObstacleAgent):
                 return False # Hard terrain blocks pathfinding entirely
@@ -157,7 +161,8 @@ class AirDwaModel(mesa.Model):
             if isinstance(agent, DroneAgent):
                 if agent.state == "FAILED":
                     return False
-                return False # Treat other drones as obstacles to prevent stacking
+                if not is_douar:
+                    return False # Treat other drones as obstacles to prevent stacking unless it's a Douar
 
         return True
 

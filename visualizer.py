@@ -279,8 +279,12 @@ class AirDwaVisualizer:
         if self.state == STATE_MENU:
             return
             
-        grid_w = self.model.grid.width if self.model else self.map_editor.width
-        grid_h = self.model.grid.height if self.model else self.map_editor.height
+        if self.state == STATE_SIMULATION and self.model:
+            grid_w = self.model.grid.width
+            grid_h = self.model.grid.height
+        else:
+            grid_w = self.map_editor.width
+            grid_h = self.map_editor.height
         available_width = w - (SIDEBAR_WIDTH if self.state != STATE_MENU else 0)
         
         scale_x = available_width // grid_w
@@ -363,14 +367,23 @@ class AirDwaVisualizer:
     # --- DRAWING UTILITIES ---
 
     def draw_grid_lines(self):
-        grid_w = self.model.grid.width if self.model else self.map_editor.width
-        grid_h = self.model.grid.height if self.model else self.map_editor.height
+        # 1. Grab dimensions based on state
+        if self.state == STATE_SIMULATION and self.model:
+            grid_w = self.model.grid.width
+            grid_h = self.model.grid.height
+        else:
+            grid_w = self.map_editor.width
+            grid_h = self.map_editor.height
+        
+        # 2. THESE MUST BE ALIGNED WITH THE "if" and "else", NOT INDENTED INSIDE THEM
         gw_pixels = grid_w * self.cell_size
         gh_pixels = grid_h * self.cell_size
         
+        # 3. Draw grid
         for x in range(grid_w + 1):
             px = self.offset_x + x * self.cell_size
             pygame.draw.line(self.screen, COLOR_GRID, (px, self.offset_y), (px, self.offset_y + gh_pixels))
+            
         for y in range(grid_h + 1):
             py = self.offset_y + y * self.cell_size
             pygame.draw.line(self.screen, COLOR_GRID, (self.offset_x, py), (self.offset_x + gw_pixels, py))
