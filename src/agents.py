@@ -14,12 +14,14 @@ LOW_BATTERY_THRESHOLD = 25   # Point at which a drone prioritizes charging
 RECOVERY_TIME = 40           # Steps a drone stays in 'FAILED' state before repair
 
 # Drone States for Finite State Machine (FSM)
+# Drone States for Finite State Machine (FSM)
 STATE_IDLE = "IDLE"
 STATE_TO_PICKUP = "TO_PICKUP"
 STATE_TO_DELIVER = "TO_DELIVER"
 STATE_CHARGING = "CHARGING"
 STATE_TO_CHARGE = "TO_CHARGE"
 STATE_FAILED = "FAILED"
+STATE_RETURNING = "RETURNING"
 
 # Physical Constraints
 ROBOT_CAPACITIES = [20, 30, 40]
@@ -88,12 +90,17 @@ class DroneAgent(mesa.Agent):
 
         elif self.state == STATE_TO_DELIVER:
             if self.current_order:
-                target = self.current_order.dropoff_pos # Go directly to the coordinates
+                target = self.current_order.dropoff_pos 
                 self.move_towards(target)
                 if self.pos == target:
-                    self.complete_order()
-            else:
-                self.state = STATE_IDLE
+                    self.complete_order() # complete_order will now trigger RTB
+
+        # --- NEW: Return to Base Protocol ---
+        elif self.state == STATE_RETURNING:
+            target = self.get_nearest_health_facility()
+            self.move_towards(target)
+            if self.pos == target:
+                self.state = STATE_IDLE # Safe to idle at a hospital
 
         elif self.state == STATE_TO_CHARGE:
             target = self.get_nearest_charger()
@@ -104,7 +111,12 @@ class DroneAgent(mesa.Agent):
         elif self.state == STATE_CHARGING:
             self.charge()
             if self.battery == BATTERY_CAPACITY:
-                self.state = STATE_IDLE # Just stay idle inside the charger
+                # PIT STOP RULE: Resume what it was doing, or go back to base
+                if hasattr(self, 'previous_state') and self.previous_state:
+                    self.state = self.previous_state
+                    self.previous_state = None
+                else:
+                    self.state = STATE_RETURNING
             
 
     def trigger_failure(self):
@@ -126,20 +138,25 @@ class DroneAgent(mesa.Agent):
             self.state = STATE_IDLE
 
     def complete_order(self):
-        """ Finalizes the delivery task and resets drone state. """
+        """ Finalizes the delivery task and triggers Return to Base. """
         if self.current_order:
             print(f"✅ Drone {self.unique_id} completed mission {self.current_order.order_id}")
             self.model.order_manager.report_completion(self.current_order)
             
         self.current_order = None
-        self.state = STATE_IDLE
+        self.state = STATE_RETURNING # Do not idle at the Douar!
         self.orders_completed += 1
 
     def get_nearest_charger(self):
-        """ Identifies the closest available charging station. """
-        chargers = self.model.drone_bases
+        """ Identifies the closest available charging station (telecom tower). """
+        chargers = self.model.charging_stations
         if not chargers: return self.pos
         return min(chargers, key=lambda c: self.euclidean_distance(self.pos, c))
+    
+    def get_nearest_health_facility(self):
+        facilities = self.model.health_facilities
+        if not facilities: return self.pos
+        return min(facilities, key=lambda f: self.euclidean_distance(self.pos, f))
 
     def move_towards(self, target_pos):
         """ Executes a single step toward a goal using pathfinding. """
@@ -273,20 +290,20 @@ class MissionControlAgent(mesa.Agent):
             print(f"🚨 CRASH DETECTED! Drone {failed_robot.unique_id} crashed at {failed_robot.pos}")
             print(f"⚠️ Abandoning original package for mission {mission.order_id}. Initiating Patient-First Protocol...")
             
-            # Find the nearest pharmacy to the PATIENT (dropoff_pos) to minimize wait time
-            nearest_pharmacy = min(
-                self.model.pharmacies, 
+            # Find the nearest health facility to the PATIENT
+            nearest_facility = min(
+                self.model.health_facilities, 
                 key=lambda p: abs(p[0] - mission.dropoff_pos[0]) + abs(p[1] - mission.dropoff_pos[1])
             )
             
-            # Re-route the mission to pick up fresh supplies from this nearest pharmacy
-            mission.pickup_pos = nearest_pharmacy
+            # Re-route the mission to pick up fresh supplies
+            mission.pickup_pos = nearest_facility
             mission.assigned_to = None
             
             if not str(mission.order_id).startswith("URGENT_RESCUE_"):
                 mission.order_id = f"URGENT_RESCUE_{mission.order_id}"
                 
-            print(f"🏥 Fresh supply ordered from Pharmacy at {nearest_pharmacy} for patient at {mission.dropoff_pos}")
+            print(f"🏥 Fresh supply ordered from Health Facility at {nearest_facility} for patient at {mission.dropoff_pos}")
 
         failed_robot.current_order = None
         
@@ -344,12 +361,19 @@ class MissionControlAgent(mesa.Agent):
 
 # --- Passive Environmental Agents ---
 
-class PharmacyAgent(mesa.Agent):
-    """ Represents static airdwa shelving. Non-walkable. """
+class HealthFacilityAgent(mesa.Agent):
+    """ Represents merged Hospitals and Pharmacies. """
     def __init__(self, unique_id, model):
         super().__init__(model)
-        self.type_name = "Pharmacy"
-        self.color = "#2ECC71"
+        self.type_name = "HealthFacility"
+        self.color = "#2ECC71" # Green
+
+class ChargingStationAgent(mesa.Agent):
+    """ Telecom towers serving as mid-flight pit stops. """
+    def __init__(self, unique_id, model):
+        super().__init__(model)
+        self.type_name = "ChargingStation"
+        self.color = "#F1C40F" # Yellow
 
 
 class DouarAgent(mesa.Agent):
@@ -359,13 +383,6 @@ class DouarAgent(mesa.Agent):
         self.type_name = "Douar"
         self.color = "#3498DB"
 
-
-class DroneBaseAgent(mesa.Agent):
-    """ Represents a location where drones can recover battery energy. Walkable by drones only. """
-    def __init__(self, unique_id, model):
-        super().__init__(model)
-        self.type_name = "DroneBase"
-        self.color = "#F1C40F" 
 
 class ObstacleAgent(mesa.Agent):
     """ Represents hard terrain (e.g., mountains, cliffs). Non-walkable. """

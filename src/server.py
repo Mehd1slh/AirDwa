@@ -16,9 +16,9 @@ from agents import (
     STATE_TO_PICKUP, 
     STATE_CHARGING, 
     STATE_TO_CHARGE, 
+    STATE_RETURNING,
     LOW_BATTERY_THRESHOLD
 )
-
 
 # --- VISUALIZATION LOGIC ---
 
@@ -41,9 +41,10 @@ def agent_portrayal(agent):
         elif agent.battery < LOW_BATTERY_THRESHOLD:
             portrayal["color"] = "yellow"
             
-        # Standard States: Color-coded based on current task
         elif agent.state == STATE_TO_DELIVER:
             portrayal["color"] = "green"   # Carrying a medical supply
+        elif agent.state == STATE_RETURNING:
+            portrayal["color"] = "cyan"    # <--- NEW: Empty, flying back to base
         elif agent.state == STATE_TO_PICKUP:
             portrayal["color"] = "blue"    # Moving to fetch a medical supply
         elif agent.state == STATE_CHARGING:
@@ -51,25 +52,24 @@ def agent_portrayal(agent):
         elif agent.state == STATE_TO_CHARGE:
             portrayal["color"] = "orange"  # Heading to a station
         else:
-            portrayal["color"] = "grey"    # Idle or undefined
+            portrayal["color"] = "grey"
 
     elif hasattr(agent, "type_name"):
         # Infrastructure: Rendered as larger squares
         portrayal["marker"] = "s" 
         portrayal["size"] = 80
         
-        # Use custom highlighted colors from the model if available, else defaults
         if hasattr(agent, "color"):
             portrayal["color"] = agent.color
         else:
-            if agent.type_name == "Pharmacy":
-                portrayal["color"] = "#2ECC71"
+            if agent.type_name == "HealthFacility":
+                portrayal["color"] = "#2ECC71" # Green
             elif agent.type_name == "Douar":
-                portrayal["color"] = "#3498DB"
-            elif agent.type_name == "DroneBase":
-                portrayal["color"] = "#F1C40F"
-            elif agent.type_name == "Obstacle": # Added Obstacle Support
-                portrayal["color"] = "#808080"
+                portrayal["color"] = "#3498DB" # Blue
+            elif agent.type_name == "ChargingStation":
+                portrayal["color"] = "#F1C40F" # Yellow
+            elif agent.type_name == "Obstacle": 
+                portrayal["color"] = "#808080" # Grey
 
     return portrayal
 

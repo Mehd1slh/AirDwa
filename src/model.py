@@ -1,6 +1,6 @@
 import mesa
 import random
-from agents import DroneAgent, PharmacyAgent, DouarAgent, DroneBaseAgent, MissionControlAgent, ObstacleAgent
+from agents import DroneAgent, HealthFacilityAgent, DouarAgent, ChargingStationAgent, MissionControlAgent, ObstacleAgent
 
 # Default environment constants
 GRID_WIDTH = 20
@@ -45,9 +45,9 @@ class AirDwaModel(mesa.Model):
         
         # References for internal management and data collection
         self.drone_agents = []
-        self.pharmacies = []
+        self.health_facilities = [] # Replaces pharmacies & drone_bases
         self.douars = []
-        self.drone_bases = []
+        self.charging_stations = [] # Replaces telecom_stations
         self.obstacles = []
         
         # Initialize the environment structure
@@ -113,26 +113,29 @@ class AirDwaModel(mesa.Model):
 
     def _load_custom_layout(self, data):
         """ Reconstructs the environment using coordinates provided by the Map Editor. """
-        for x, y in data["pharmacies"]:
-            pharmacy = PharmacyAgent(f"Shelf_{x}_{y}", self)
-            self.grid.place_agent(pharmacy, (x, y))
-            self.pharmacies.append((x, y))
+        
+        # Merge Pharmacies and Drone Bases into a single Health Facility list
+        all_medical_sites = data.get("pharmacies", []) + data.get("drone_bases", [])
+        for x, y in all_medical_sites:
+            facility = HealthFacilityAgent(f"Health_{x}_{y}", self)
+            self.grid.place_agent(facility, (x, y))
+            self.health_facilities.append((x, y))
             
-        for x, y in data["douars"]:
+        for x, y in data.get("douars", []):
             station = DouarAgent(f"Pack_{x}_{y}", self)
             self.grid.place_agent(station, (x, y))
             self.douars.append((x, y))
             
-        for x, y in data["drone_bases"]:
-            charger = DroneBaseAgent(f"Charge_{x}_{y}", self)
+        # Telecom Stations act as chargers
+        for x, y in data.get("telecom_stations", []):
+            charger = ChargingStationAgent(f"Charge_{x}_{y}", self)
             self.grid.place_agent(charger, (x, y))
-            self.drone_bases.append((x, y))
+            self.charging_stations.append((x, y))
         
-        if "obstacles" in data:
-            for x, y in data["obstacles"]:
-                obs = ObstacleAgent(f"Obs_{x}_{y}", self)
-                self.grid.place_agent(obs, (x, y))
-                self.obstacles.append((x, y))
+        for x, y in data.get("obstacles", []):
+            obs = ObstacleAgent(f"Obs_{x}_{y}", self)
+            self.grid.place_agent(obs, (x, y))
+            self.obstacles.append((x, y))
 
     def _init_robots(self):
         """ Spawns the drone fleet at random available locations. """
@@ -181,9 +184,9 @@ class AirDwaModel(mesa.Model):
         """ Metric: Number of drones currently in IDLE state. """
         return sum(1 for r in self.drone_agents if r.state == "IDLE")
     
-    def get_random_shelf(self):
-        """ Utility for mission creation: returns a random pharmacy coordinate. """
-        return random.choice(self.pharmacies) if self.pharmacies else None
+    def get_random_health_facility(self):
+        """ Utility for mission creation: returns a random origin coordinate. """
+        return random.choice(self.health_facilities) if self.health_facilities else None
 
     def get_random_packing_station(self):
         """ Utility for mission creation: returns a random station coordinate. """
