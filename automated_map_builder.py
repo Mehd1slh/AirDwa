@@ -4,8 +4,10 @@ import os
 import osmnx as ox
 import rasterio
 
+OPENTOPOGRAPHY_KEY = os.getenv("OPENTOPOGRAPHY_KEY")
+
 class AutomatedMapBuilder:
-    def __init__(self, bbox, width=50, height=50, drone_alt_limit=2500, api_key="YOUR_OPENTOPOGRAPHY_KEY"):
+    def __init__(self, bbox, width=50, height=50, drone_alt_limit=2500, api_key=OPENTOPOGRAPHY_KEY):
         """
         bbox format: (south, west, north, east)
         """
@@ -150,6 +152,6 @@ if __name__ == "__main__":
         width=40, 
         height=40, 
         drone_alt_limit=2800, # Mark any cell > 2800m as an obstacle
-        api_key="YOUR_OPENTOPOGRAPHY_API_KEY"
+        api_key=OPENTOPOGRAPHY_KEY
     )
     builder.generate("toubkal_map.json")

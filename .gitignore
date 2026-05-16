@@ -2,3 +2,4 @@
 /.gradio
 /pretrained_models
 bbox_selector.html
+.env
