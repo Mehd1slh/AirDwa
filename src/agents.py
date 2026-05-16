@@ -1,6 +1,7 @@
 import mesa
 import random
 import heapq
+import math
 
 # --- Global Constants ---
 
@@ -138,7 +139,7 @@ class DroneAgent(mesa.Agent):
         """ Identifies the closest available charging station. """
         chargers = self.model.drone_bases
         if not chargers: return self.pos
-        return min(chargers, key=lambda c: self.manhattan_distance(self.pos, c))
+        return min(chargers, key=lambda c: self.euclidean_distance(self.pos, c))
 
     def move_towards(self, target_pos):
         """ Executes a single step toward a goal using pathfinding. """
@@ -166,11 +167,14 @@ class DroneAgent(mesa.Agent):
                 break
 
             for next_pos in self.get_neighbors(current):
-                new_cost = cost_so_far[current] + 1 
+                # Calculate the exact cost to step to the next node (1 for straight, ~1.414 for diagonal)
+                step_cost = self.euclidean_distance(current, next_pos)
+                new_cost = cost_so_far[current] + step_cost 
+                
                 if not self.model.is_walkable(next_pos): continue
                 if next_pos not in cost_so_far or new_cost < cost_so_far[next_pos]:
                     cost_so_far[next_pos] = new_cost
-                    priority = new_cost + self.manhattan_distance(next_pos, goal)
+                    priority = new_cost + self.euclidean_distance(next_pos, goal)
                     heapq.heappush(frontier, (priority, next_pos))
                     came_from[next_pos] = current
         
@@ -178,9 +182,12 @@ class DroneAgent(mesa.Agent):
         return []
 
     def get_neighbors(self, pos):
-        """ Returns orthogonal adjacent cells. """
+        """ Returns all 8 adjacent cells (Moore neighborhood). """
         x, y = pos
-        candidates = [(x+1, y), (x-1, y), (x, y+1), (x, y-1)]
+        candidates = [
+            (x+1, y), (x-1, y), (x, y+1), (x, y-1),        # orthogonal
+            (x+1, y+1), (x+1, y-1), (x-1, y+1), (x-1, y-1) # diagonals
+        ]
         valid_neighbors = []
         for (cx, cy) in candidates:
             if not self.model.grid.out_of_bounds((cx, cy)):
@@ -197,9 +204,9 @@ class DroneAgent(mesa.Agent):
         path.reverse() 
         return path
 
-    def manhattan_distance(self, pos1, pos2):
-        """ Simple heuristic for grid-based distance. """
-        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+    def euclidean_distance(self, pos1, pos2):
+        """ Euclidean heuristic for grid-based distance including diagonals. """
+        return math.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
 
     def charge(self):
         """ Increases battery level until capacity is reached. """
@@ -228,8 +235,7 @@ class DroneAgent(mesa.Agent):
         return dist + ((BATTERY_CAPACITY - self.battery) * 0.1) + opportunity_cost
 
     def calculate_distance(self, target):
-        return self.manhattan_distance(self.pos, target)
-
+        return self.euclidean_distance(self.pos, target)
 
 class MissionControlAgent(mesa.Agent):
     """ The central 'dispatcher' responsible for mission creation and task allocation. """
