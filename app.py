@@ -8,7 +8,7 @@ import math
 from dotenv import load_dotenv
 
 load_dotenv()
-from automated_map_builder import AutomatedMapBuilder
+from map_build.automated_map_builder import AutomatedMapBuilder
 
 # --- GEOGRAPHIC MATH HELPERS ---
 def haversine_distance(lat1, lon1, lat2, lon2):

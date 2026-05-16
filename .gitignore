@@ -4,3 +4,4 @@
 bbox_selector.html
 .env
 __pycache__/
+src/__pycache__/

@@ -10,8 +10,8 @@ BATTERY_CAPACITY = 100
 BATTERY_DRAIN_MOVE = 1       # Cost per step moved
 BATTERY_DRAIN_IDLE = 0.1     # Cost per step while doing nothing
 CHARGE_RATE = 100            # Amount recovered per step at a station
-LOW_BATTERY_THRESHOLD = 25   # Point at which a drone prioritizes charging
-RECOVERY_TIME = 40           # Steps a drone stays in 'FAILED' state before repair
+LOW_BATTERY_THRESHOLD = 40   # Point at which a drone prioritizes charging
+RECOVERY_TIME = 25           # Steps a drone stays in 'FAILED' state before repair
 
 # Drone States for Finite State Machine (FSM)
 # Drone States for Finite State Machine (FSM)
@@ -24,35 +24,46 @@ STATE_FAILED = "FAILED"
 STATE_RETURNING = "RETURNING"
 
 # Physical Constraints
-ROBOT_CAPACITIES = [20, 30, 40]
-MIN_PACKAGE_WEIGHT = 5
-MAX_PACKAGE_WEIGHT = 40
+MIN_PACKAGE_PRIORITY = 1
+MAX_PACKAGE_PRIORITY = 3
+DRONE_SPEEDS = [1, 2, 3]
+
+MEDICINE_DB = {
+    "doliprane": 1,    # Routine
+    "antibiotic": 1,   # Routine
+    "insulin": 2,      # Urgent
+    "inhaler": 2,      # Urgent
+    "blood": 3,        # Critical
+    "antivenom": 3,    # Critical
+    "epipen": 3        # Critical
+}
 
 
 class Mission:
     """ Represents a delivery task from a pickup location (Pharmacy) to a dropoff location (Douar). """
-    def __init__(self, order_id, pickup_pos, dropoff_pos, weight):
+    def __init__(self, order_id, pickup_pos, dropoff_pos, priority):
         self.order_id = order_id
-        self.weight = weight
+        self.priority = priority
         self.pickup_pos = pickup_pos
         self.dropoff_pos = dropoff_pos
-        self.assigned_to = None # Reference to the DroneAgent handling the mission
+        self.assigned_to = None 
 
 class DroneAgent(mesa.Agent):
-    """ The primary autonomous agent capable of moving, picking up missions, and managing battery levels. """
     def __init__(self, unique_id, model, start_pos):
         super().__init__(model) 
         self.custom_id = unique_id
         self.pos = None
         self.battery = BATTERY_CAPACITY
         self.state = STATE_IDLE
-        self.previous_state = None  # Stores state before charging to resume task later
+        self.previous_state = None
         self.current_order = None
         self.orders_completed = 0
         self.distance_traveled = 0
         self.failure_timer = 0
         self.repairs_triggered = 0
-        self.capacity = random.choice(ROBOT_CAPACITIES) # Randomized drone strength
+        
+        # REPLACED capacity with speed
+        self.speed = random.choice(DRONE_SPEEDS)
 
     def step(self):
         """ Main logic loop executed at every simulation tick. """
@@ -159,15 +170,20 @@ class DroneAgent(mesa.Agent):
         return min(facilities, key=lambda f: self.euclidean_distance(self.pos, f))
 
     def move_towards(self, target_pos):
-        """ Executes a single step toward a goal using pathfinding. """
-        if self.pos == target_pos: return
-        path = self.a_star_search(self.pos, target_pos)
-        if path and len(path) > 0:
-            next_step = path[0] 
-            if self.model.is_walkable(next_step):
-                self.model.grid.move_agent(self, next_step)
-                self.distance_traveled += 1
-                self.battery -= BATTERY_DRAIN_MOVE
+        """ Executes steps toward a goal based on the drone's speed. """
+        for _ in range(self.speed):
+            if self.pos == target_pos: 
+                break # Reached destination
+                
+            path = self.a_star_search(self.pos, target_pos)
+            if path and len(path) > 0:
+                next_step = path[0] 
+                if self.model.is_walkable(next_step):
+                    self.model.grid.move_agent(self, next_step)
+                    self.distance_traveled += 1
+                    self.battery -= BATTERY_DRAIN_MOVE
+                else:
+                    break
 
     def a_star_search(self, start, goal):
         """ Classic A* implementation to find the shortest path while avoiding obstacles. """
@@ -242,14 +258,16 @@ class DroneAgent(mesa.Agent):
             return float('inf')
         if self.state != STATE_IDLE or self.battery < LOW_BATTERY_THRESHOLD:
             return float('inf')
-        if mission.weight > self.capacity:
-            return float('inf')
         
         dist = self.calculate_distance(mission.pickup_pos)
-        wasted_space = self.capacity - mission.weight
-        opportunity_cost = wasted_space * 1.0 # Penalize taking small items with large drones
         
-        return dist + ((BATTERY_CAPACITY - self.battery) * 0.1) + opportunity_cost
+        # Faster drones will have a lower time_cost
+        time_cost = dist / self.speed 
+        
+        # Multiply priority by speed to give fast drones a massive bidding advantage on urgent tasks
+        priority_bonus = mission.priority * self.speed 
+        
+        return time_cost + ((BATTERY_CAPACITY - self.battery) * 0.1) - priority_bonus
 
     def calculate_distance(self, target):
         return self.euclidean_distance(self.pos, target)
@@ -312,15 +330,14 @@ class MissionControlAgent(mesa.Agent):
         self.run_auction_allocation(unassigned)
 
     def create_new_order(self):
-        """ Spawns an mission at a random pharmacy with a target packing station. """
+        """ Spawns a mission at a random pharmacy with a target packing station. """
         pickup = self.model.get_random_health_facility()
         dropoff = self.model.get_random_packing_station()
         if pickup and dropoff:
-            weight = random.randint(MIN_PACKAGE_WEIGHT, MAX_PACKAGE_WEIGHT)
-            new_order = Mission(self.next_order_id, pickup, dropoff, weight)
+            priority = random.randint(MIN_PACKAGE_PRIORITY, MAX_PACKAGE_PRIORITY)
+            new_order = Mission(self.next_order_id, pickup, dropoff, priority)
             self.next_order_id += 1
             self.missions.append(new_order)
-
 
     def run_auction_allocation(self, unassigned_orders):
         """ Allocates tasks by awarding them to the agent with the lowest cost. """
@@ -359,6 +376,29 @@ class MissionControlAgent(mesa.Agent):
         if mission in self.missions:
             self.missions.remove(mission)
 
+    def create_specific_order(self, medicine_name, station_id):
+        """ Explicitly triggers an order from the Voice Assistant / ASR """
+        # Normalize medicine name to find priority
+        med_key = str(medicine_name).lower()
+        priority = MEDICINE_DB.get(med_key, 1) # Default to 1 if unknown
+        
+        # Find the target Douar coordinates by its Station ID
+        dropoff_pos = self.model.get_douar_by_station_id(station_id)
+        pickup_pos = self.model.get_random_health_facility()
+        
+        if pickup_pos and dropoff_pos:
+            new_order = Mission(self.next_order_id, pickup_pos, dropoff_pos, medicine_name, priority)
+            self.next_order_id += 1
+            self.missions.append(new_order)
+            print(f"🎙️ VOICE COMMAND ACCEPTED: Dispatching {medicine_name} (Priority {priority}) to Station {station_id}")
+            
+            # Immediately run auction to dispatch
+            self.run_auction_allocation([new_order])
+            return True
+        else:
+            print(f"❌ Error: Station {station_id} not found in environment!")
+            return False
+
 # --- Passive Environmental Agents ---
 
 class HealthFacilityAgent(mesa.Agent):
@@ -378,10 +418,11 @@ class ChargingStationAgent(mesa.Agent):
 
 class DouarAgent(mesa.Agent):
     """ Represents the target destination for goods. Non-walkable. """
-    def __init__(self, unique_id, model):
+    def __init__(self, unique_id, model, station_id):
         super().__init__(model)
         self.type_name = "Douar"
         self.color = "#3498DB"
+        self.station_id = str(station_id)
 
 
 class ObstacleAgent(mesa.Agent):
