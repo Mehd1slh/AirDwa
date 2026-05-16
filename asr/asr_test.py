@@ -1,87 +1,106 @@
 import gradio as gr
 import torch
 import json
-from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
+import requests
+from transformers import pipeline
 
 print("🚁 Starting AirDwa Systems...")
+
+# ── Ollama config ──────────────────────────────────────────────────────────────
+OLLAMA_URL   = "http://localhost:11434/api/chat"
+OLLAMA_MODEL = "qwen3:1.7b"   # exactly as shown by `ollama list`
 
 # ==========================================
 # 1. LOAD THE ASR MODEL (Whisper Small Arabic)
 # ==========================================
 print("Loading Whisper ASR Model (ayoubkirouane/whisper-small-ar)...")
-# Automatically use GPU if available, otherwise use CPU
-device = 0 if torch.cuda.is_available() else -1 
+device = 0 if torch.cuda.is_available() else -1
 
 asr_pipe = pipeline(
-    "automatic-speech-recognition", 
+    "automatic-speech-recognition",
     model="ayoubkirouane/whisper-small-ar",
     device=device
 )
+print("✅ Whisper ready. Qwen3 runs via Ollama — no extra loading needed.")
 
 # ==========================================
-# 2. LOAD THE LOCAL LLM (Qwen 1.5B)
-# ==========================================
-print("Loading Qwen 1.5B Local LLM...")
-model_name = "Qwen/Qwen2.5-1.5B-Instruct"
-
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-llm = AutoModelForCausalLM.from_pretrained(
-    model_name, 
-    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-    device_map="auto"
-)
-
-# ==========================================
-# 3. LLM EXTRACTION LOGIC
+# 2. LLM EXTRACTION LOGIC  (Ollama / Qwen3)
 # ==========================================
 def extract_with_llm(transcription):
-    """Passes the transcribed Arabic text to Qwen to extract clean JSON."""
-    
+    """Sends the transcribed Darija/French text to local Qwen3 via Ollama."""
+
     messages = [
-        {"role": "system", "content": """You are an AI assistant for a drone medical dispatch system in Morocco. 
-        Read the transcribed Arabic/Darija text and extract the requested medicine and the station number.
-        Output ONLY a valid JSON object with the keys "medicine" and "station". Do not include any other text or markdown formatting.
-        Example: {"medicine": "Doliprane", "station": "31"}"""},
+        {"role": "system", "content": """/no_think
+You are an AI assistant for a drone medical dispatch system in Morocco.
+The user speaks in Darija or French to request a medicine delivery to a numbered station.
+
+Map the medicine to one of these lowercase English keys:
+doliprane, paracetamol, dalidol, antibiotic, antibiotique, amoxicillin, augmentin, aspirin,
+insulin, insuline, inhaler, inhalateur, pompe, ventoline,
+blood, sang, antivenom, antivenin, serum, epipen, epinephrine, adrenaline, morphine, glucagon
+
+Darija hints:
+  دوليبران → doliprane
+  مضاد حيوي / antibiotique → antibiotic
+  أنسولين → insulin
+  بخاخ / pompe / ventoline → inhaler
+  دم / sang → blood
+  ترياق / sérum / antivenin → antivenom
+  إيبيبن / adrénaline → epipen
+
+Output ONLY a valid JSON object — no markdown, no extra text:
+{"medicine": "<key>", "station": "<number>"}
+Example: {"medicine": "antivenom", "station": "3"}"""},
         {"role": "user", "content": transcription}
     ]
-    
-    # Prepare prompt for Qwen
-    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    inputs = tokenizer([text], return_tensors="pt").to(llm.device)
-    
-    # Generate the response
-    outputs = llm.generate(**inputs, max_new_tokens=50, temperature=0.1)
-    response_text = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
-    
-    # Safely parse the JSON
+
     try:
+        resp = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": OLLAMA_MODEL,
+                "messages": messages,
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": 60}
+            },
+            timeout=30
+        )
+        resp.raise_for_status()
+        response_text = resp.json()["message"]["content"].strip()
+
+        # Strip accidental markdown fences
+        if response_text.startswith("```"):
+            response_text = response_text.split("```")[1]
+            if response_text.startswith("json"):
+                response_text = response_text[4:]
+
         data = json.loads(response_text)
-        return data.get("medicine", "Unknown"), str(data.get("station", "Unknown"))
-    except json.JSONDecodeError:
+        return str(data.get("medicine", "Unknown")).lower(), str(data.get("station", "Unknown"))
+
+    except requests.exceptions.ConnectionError:
+        print("❌ Ollama not reachable — run: ollama serve")
+        return "Extraction Failed", "Extraction Failed"
+    except Exception as e:
+        print(f"❌ LLM extraction error: {e}")
         return "Extraction Failed", "Extraction Failed"
 
 # ==========================================
-# 4. MAIN PROCESSING FUNCTION
+# 3. MAIN PROCESSING FUNCTION
 # ==========================================
 def process_voice_command(audio_filepath):
     if not audio_filepath:
         return "No audio provided", "", ""
-        
+
     try:
-        # A. Transcribe the audio using the Whisper Pipeline
         result = asr_pipe(audio_filepath)
         transcription = result["text"]
-        
-        # B. Extract using Qwen
         medicine, station = extract_with_llm(transcription)
-        
         return transcription, medicine, f"Station {station}"
-        
     except Exception as e:
         return f"Error: {str(e)}", "Error", "Error"
 
 # ==========================================
-# 5. GRADIO UI
+# 4. GRADIO UI
 # ==========================================
 demo = gr.Interface(
     fn=process_voice_command,
@@ -92,9 +111,8 @@ demo = gr.Interface(
         gr.Textbox(label="📍 Target Station Number")
     ],
     title="🚁 AirDwa: Voice-Activated Drone Dispatch",
-    description="Record a voice note. The ayoubkirouane/whisper-small-ar model handles the transcription, and a local Qwen 1.5B LLM extracts the variables for the drone swarm."
+    description="Whisper transcribes audio. Qwen3:1.7b via Ollama extracts medicine + station."
 )
 
 if __name__ == "__main__":
-    # Launch locally and let Gradio assign an open port automatically
     demo.launch(server_name="127.0.0.1")

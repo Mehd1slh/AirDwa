@@ -3,8 +3,14 @@ import torch
 import json
 import threading
 import time
-from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
+import requests
+from transformers import pipeline
 from src.model import AirDwaModel
+from src.agents import MEDICINE_DB
+
+# ── Ollama config ──────────────────────────────────────────────────────────────
+OLLAMA_URL   = "http://localhost:11434/api/chat"
+OLLAMA_MODEL = "qwen3:1.7b"   # exactly as shown by `ollama list`
 
 print("🚁 Starting AirDwa Global System...")
 
@@ -31,38 +37,71 @@ sim_thread = threading.Thread(target=run_simulation_in_background, daemon=True)
 sim_thread.start()
 
 # ==========================================
-# 2. LOAD AI MODELS (Whisper & Qwen)
+# 2. LOAD ASR MODEL (Whisper)
 # ==========================================
-device = 0 if torch.cuda.is_available() else -1 
+# Qwen runs via Ollama locally — no model loading needed here.
+device = 0 if torch.cuda.is_available() else -1
 asr_pipe = pipeline("automatic-speech-recognition", model="ayoubkirouane/whisper-small-ar", device=device)
 
-model_name = "Qwen/Qwen2.5-1.5B-Instruct"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-llm = AutoModelForCausalLM.from_pretrained(
-    model_name, 
-    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-    device_map="auto"
-)
-
 def extract_with_llm(transcription):
+    # Build the list of recognized medicine keys so the model stays within bounds
+    known_medicines = ", ".join(sorted(set(MEDICINE_DB.keys())))
+
     messages = [
-        {"role": "system", "content": """You are an AI assistant for a drone medical dispatch system in Morocco. 
-        Read the transcribed Arabic/Darija text and extract the requested medicine and the target station number.
-        Output ONLY a valid JSON object with the keys "medicine" (string) and "station" (number). 
-        Example: {"medicine": "antivenom", "station": 3}"""},
+        {"role": "system", "content": f"""/no_think
+You are an AI assistant for a drone medical dispatch system in Morocco.
+The user will speak in Darija (Moroccan Arabic) or French to request a medicine delivery to a numbered station.
+
+Your job:
+1. Identify the medicine they are requesting.
+2. Map it to ONE of the following recognized keys (lowercase English): {known_medicines}
+   - If the user says "دوليبران" or "dalidol" → use "doliprane"
+   - If the user says "مضاد حيوي" or "antibiotique" → use "antibiotic"
+   - If the user says "أنسولين" → use "insulin"
+   - If the user says "بخاخ", "pompe" or "ventoline" → use "inhaler"
+   - If the user says "دم" or "sang" → use "blood"
+   - If the user says "ترياق", "sérum" or "antivenin" → use "antivenom"
+   - If the user says "إيبيبن" or "adrénaline" → use "epipen"
+   - Use the closest key from the list for anything else.
+3. Extract the station number (integer).
+
+Output ONLY a valid JSON object with exactly two keys:
+  "medicine": one of the recognized keys above (string, lowercase)
+  "station": the station number as a string (e.g. "3")
+
+Example: {{"medicine": "antivenom", "station": "3"}}
+Do not include any other text, markdown, or explanation."""},
         {"role": "user", "content": transcription}
     ]
-    
-    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    inputs = tokenizer([text], return_tensors="pt").to(llm.device)
-    
-    outputs = llm.generate(**inputs, max_new_tokens=50, temperature=0.1)
-    response_text = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
-    
+
     try:
+        resp = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": OLLAMA_MODEL,
+                "messages": messages,
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": 60}
+            },
+            timeout=30
+        )
+        resp.raise_for_status()
+        response_text = resp.json()["message"]["content"].strip()
+
+        # Strip any accidental markdown fences
+        if response_text.startswith("```"):
+            response_text = response_text.split("```")[1]
+            if response_text.startswith("json"):
+                response_text = response_text[4:]
+
         data = json.loads(response_text)
         return str(data.get("medicine", "Unknown")).lower(), str(data.get("station", "Unknown"))
-    except:
+
+    except requests.exceptions.ConnectionError:
+        print("❌ Ollama not reachable — is `ollama serve` running?")
+        return "Unknown", "Unknown"
+    except Exception as e:
+        print(f"❌ LLM extraction error: {e}")
         return "Unknown", "Unknown"
 
 # ==========================================
