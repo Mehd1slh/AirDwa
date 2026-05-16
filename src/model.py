@@ -1,6 +1,6 @@
 import mesa
 import random
-from agents import DroneAgent, PharmacyAgent, DouarAgent, DroneBaseAgent, MissionControlAgent
+from agents import DroneAgent, PharmacyAgent, DouarAgent, DroneBaseAgent, MissionControlAgent, ObstacleAgent
 
 # Default environment constants
 GRID_WIDTH = 20
@@ -48,6 +48,7 @@ class AirDwaModel(mesa.Model):
         self.pharmacies = []
         self.douars = []
         self.drone_bases = []
+        self.obstacles = []
         
         # Initialize the environment structure
         if map_data:
@@ -126,6 +127,12 @@ class AirDwaModel(mesa.Model):
             charger = DroneBaseAgent(f"Charge_{x}_{y}", self)
             self.grid.place_agent(charger, (x, y))
             self.drone_bases.append((x, y))
+        
+        if "obstacles" in data:
+            for x, y in data["obstacles"]:
+                obs = ObstacleAgent(f"Obs_{x}_{y}", self)
+                self.grid.place_agent(obs, (x, y))
+                self.obstacles.append((x, y))
 
     def _init_robots(self):
         """ Spawns the drone fleet at random available locations. """
@@ -137,15 +144,15 @@ class AirDwaModel(mesa.Model):
             self.drone_agents.append(drone)
 
     def is_walkable(self, pos):
-        """ Collision avoidance: checks if a cell is out of bounds or blocked by static objects/failed drones. """
+        """ Collision avoidance: checks if a cell is out of bounds or blocked by obstacles. """
         if self.grid.out_of_bounds(pos):
             return False
             
         cell_contents = self.grid.get_cell_list_contents(pos)
         for agent in cell_contents:
-            # Static infrastructure blocks path
-            if isinstance(agent, (PharmacyAgent, DouarAgent)):
-                return False
+            if isinstance(agent, ObstacleAgent):
+                return False # Hard terrain blocks pathfinding entirely
+                
             # Working drones are handled by A*, but a FAILED drone becomes a permanent obstacle
             if isinstance(agent, DroneAgent):
                 if agent.state == "FAILED":

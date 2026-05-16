@@ -63,11 +63,13 @@ def agent_portrayal(agent):
             portrayal["color"] = agent.color
         else:
             if agent.type_name == "Pharmacy":
-                portrayal["color"] = "brown"
+                portrayal["color"] = "#2ECC71"
             elif agent.type_name == "Douar":
-                portrayal["color"] = "black"
+                portrayal["color"] = "#3498DB"
             elif agent.type_name == "DroneBase":
-                portrayal["color"] = "orange"
+                portrayal["color"] = "#F1C40F"
+            elif agent.type_name == "Obstacle": # Added Obstacle Support
+                portrayal["color"] = "#808080"
 
     return portrayal
 

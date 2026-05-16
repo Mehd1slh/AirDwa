@@ -25,11 +25,6 @@ ROBOT_CAPACITIES = [20, 30, 40]
 MIN_PACKAGE_WEIGHT = 5
 MAX_PACKAGE_WEIGHT = 40
 
-# Colors used to highlight pharmacies/stations associated with active missions
-VISUALIZATION_COLORS = [
-    "#00FFFF", "#FF00FF", "#FF1493", "#32CD32", "#008080", 
-    "#000080", "#800000", "#808000", "#FFD700", "#4B0082"
-]
 
 class Mission:
     """ Represents a delivery task from a pickup location (Pharmacy) to a dropoff location (Douar). """
@@ -84,21 +79,18 @@ class DroneAgent(mesa.Agent):
         # --- State Machine Logic ---
         if self.state == STATE_TO_PICKUP:
             if self.current_order:
-                target_access = self.get_access_point(self.current_order.pickup_pos)
-                if target_access:
-                    self.move_towards(target_access)
-                    if self.pos == target_access:
-                        self.reset_shelf_color(self.current_order.pickup_pos)
-                        self.state = STATE_TO_DELIVER
-                        print(f"📦 Drone {self.unique_id} picked up mission {self.current_order.order_id}")
+                target = self.current_order.pickup_pos # Go directly to the coordinates
+                self.move_towards(target)
+                if self.pos == target:
+                    self.state = STATE_TO_DELIVER
+                    print(f"📦 Drone {self.unique_id} picked up mission {self.current_order.order_id}")
 
         elif self.state == STATE_TO_DELIVER:
             if self.current_order:
-                target_access = self.get_access_point(self.current_order.dropoff_pos)
-                if target_access:
-                    self.move_towards(target_access)
-                    if self.pos == target_access:
-                        self.complete_order()
+                target = self.current_order.dropoff_pos # Go directly to the coordinates
+                self.move_towards(target)
+                if self.pos == target:
+                    self.complete_order()
             else:
                 self.state = STATE_IDLE
 
@@ -111,7 +103,7 @@ class DroneAgent(mesa.Agent):
         elif self.state == STATE_CHARGING:
             self.charge()
             if self.battery == BATTERY_CAPACITY:
-                self.vacate_station() # Clear the charger for other drones
+                self.state = STATE_IDLE # Just stay idle inside the charger
             
 
     def trigger_failure(self):
@@ -124,18 +116,6 @@ class DroneAgent(mesa.Agent):
         if self.current_order:
             self.model.order_manager.handle_robot_failure(self, old_state)
     
-    def vacate_station(self):
-        """ Unblocks a charging station by moving to a neighboring walkable cell. """
-        neighbors = self.model.grid.get_neighborhood(self.pos, moore=False, include_center=False)
-        moved = False
-        
-        for neighbor in neighbors:
-            cell_contents = self.model.grid.get_cell_list_contents(neighbor)
-            is_station = any(isinstance(c, DroneBaseAgent) for c in cell_contents)
-            if not is_station and self.model.is_walkable(neighbor):
-                self.model.grid.move_agent(self, neighbor)
-                moved = True
-                break
         
         # Resume the task being held before the drone went to charge
         if hasattr(self, 'previous_state') and self.previous_state:
@@ -144,44 +124,15 @@ class DroneAgent(mesa.Agent):
         else:
             self.state = STATE_IDLE
 
-    def reset_shelf_color(self, pos):
-        """ Reverts a pharmacy to its default color once a medical supply is removed. """
-        if self.model.grid.out_of_bounds(pos): return
-        cell_contents = self.model.grid.get_cell_list_contents(pos)
-        for agent in cell_contents:
-            if isinstance(agent, PharmacyAgent):
-                agent.color = "brown"
-
-    def reset_station_color(self, pos):
-        """ Reverts a packing station to black once the mission delivery is finished. """
-        if self.model.grid.out_of_bounds(pos): return
-        cell_contents = self.model.grid.get_cell_list_contents(pos)
-        for agent in cell_contents:
-            if isinstance(agent, DouarAgent):
-                agent.color = "black"
-
     def complete_order(self):
         """ Finalizes the delivery task and resets drone state. """
         if self.current_order:
             print(f"✅ Drone {self.unique_id} completed mission {self.current_order.order_id}")
-            self.reset_station_color(self.current_order.dropoff_pos)
             self.model.order_manager.report_completion(self.current_order)
             
         self.current_order = None
         self.state = STATE_IDLE
         self.orders_completed += 1
-
-    def get_access_point(self, target_pos):
-        """ Finds an adjacent walkable cell to a target (pharmacy/station) since targets are non-walkable. """
-        x, y = target_pos
-        potential_access_points = [(x+1, y), (x-1, y), (x, y+1), (x, y-1)]
-        
-        if self.pos in potential_access_points:
-            return self.pos
-
-        valid_points = [p for p in potential_access_points if self.model.is_walkable(p)]
-        if not valid_points: return None 
-        return min(valid_points, key=lambda p: self.manhattan_distance(self.pos, p))
 
     def get_nearest_charger(self):
         """ Identifies the closest available charging station. """
@@ -322,13 +273,8 @@ class MissionControlAgent(mesa.Agent):
 
         failed_robot.current_order = None
         
-        # Immediate attempt to find a healthy drone to finish the job
-        if self.model.coordination_type in ["cnp", "auction"]:
-            unassigned = [mission]
-            if self.model.coordination_type == "cnp":
-                self.run_cnp_allocation(unassigned)
-            elif self.model.coordination_type == "auction":
-                self.run_auction_allocation(unassigned)
+        unassigned = [mission]
+        self.run_auction_allocation(unassigned)
 
     def create_new_order(self):
         """ Spawns an mission at a random pharmacy with a target packing station. """
@@ -339,17 +285,6 @@ class MissionControlAgent(mesa.Agent):
             new_order = Mission(self.next_order_id, pickup, dropoff, weight)
             self.next_order_id += 1
             self.missions.append(new_order)
-            
-            # Change colors of the pharmacy and station so we can see which task is linked
-            highlight_color = random.choice(VISUALIZATION_COLORS)
-            cell_contents_pickup = self.model.grid.get_cell_list_contents(pickup)
-            for agent in cell_contents_pickup:
-                if isinstance(agent, PharmacyAgent): 
-                    agent.color = highlight_color
-            cell_contents_dropoff = self.model.grid.get_cell_list_contents(dropoff)
-            for agent in cell_contents_dropoff:
-                if isinstance(agent, DouarAgent): 
-                    agent.color = highlight_color
 
 
     def run_auction_allocation(self, unassigned_orders):
@@ -396,7 +331,7 @@ class PharmacyAgent(mesa.Agent):
     def __init__(self, unique_id, model):
         super().__init__(model)
         self.type_name = "Pharmacy"
-        self.color = "brown" 
+        self.color = "#2ECC71"
 
 
 class DouarAgent(mesa.Agent):
@@ -404,7 +339,7 @@ class DouarAgent(mesa.Agent):
     def __init__(self, unique_id, model):
         super().__init__(model)
         self.type_name = "Douar"
-        self.color = "black" 
+        self.color = "#3498DB"
 
 
 class DroneBaseAgent(mesa.Agent):
@@ -412,3 +347,11 @@ class DroneBaseAgent(mesa.Agent):
     def __init__(self, unique_id, model):
         super().__init__(model)
         self.type_name = "DroneBase"
+        self.color = "#F1C40F" 
+
+class ObstacleAgent(mesa.Agent):
+    """ Represents hard terrain (e.g., mountains, cliffs). Non-walkable. """
+    def __init__(self, unique_id, model):
+        super().__init__(model)
+        self.type_name = "Obstacle"
+        self.color = "#808080" 

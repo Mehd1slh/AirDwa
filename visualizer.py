@@ -10,11 +10,12 @@ from src.model import AirDwaModel
 from src.agents import DroneAgent, PharmacyAgent, DouarAgent, DroneBaseAgent
 
 # Map Editor Constants
-TILE_TYPES = ["Pharmacy", "Douar", "DroneBase", "Empty"]
+TILE_TYPES = ["Pharmacy", "Douar", "DroneBase", "Obstacle", "Empty"]
 TILE_COLORS = {
-    "Pharmacy": (46, 204, 113), # Medical Green for Pharmacy/Hospital
-    "Douar": (52, 152, 219), # Blue for Patient/Village
-    "DroneBase": (241, 196, 15), # Yellow for Drone Base
+    "Pharmacy": (46, 204, 113), 
+    "Douar": (52, 152, 219), 
+    "DroneBase": (241, 196, 15), 
+    "Obstacle": (128, 128, 128), # Gray for mountains/hard terrain
     "Empty": (236, 240, 241)
 }
 
@@ -85,7 +86,8 @@ class MapEditor:
             "height": self.height,
             "pharmacies": [],
             "douars": [],
-            "drone_bases": []
+            "drone_bases": [],
+            "obstacles": [] # Added obstacles array
         }
         for x in range(self.width):
             for y in range(self.height):
@@ -96,6 +98,8 @@ class MapEditor:
                     data["douars"].append([x, y])
                 elif tile == "DroneBase": 
                     data["drone_bases"].append([x, y])
+                elif tile == "Obstacle": 
+                    data["obstacles"].append([x, y])
         
         os.makedirs("maps", exist_ok=True)
         filepath = f"maps/{filename}"
@@ -217,20 +221,23 @@ class AirDwaVisualizer:
         self.sim_buttons = [self.btn_back, self.btn_pause, self.btn_reset, 
                            self.btn_slower, self.btn_faster, self.btn_fail]
 
-        # Editor Sidebar
+        # Editor Sidebar - Updated Layout
         self.btn_editor_back = Button(0, 0, 250, 40, "Return to Menu", self.return_to_menu, color=(100,100,100))
         self.slider_width = Slider(0, 0, 250, 10, 50, self.grid_width, "Width")
         self.slider_height = Slider(0, 0, 250, 10, 50, self.grid_height, "Height")
-        self.btn_sel_shelf = Button(0, 0, 80, 40, "Pharmacy", self.set_tile, "Pharmacy", 
-                                    color=TILE_COLORS["Pharmacy"], hover_color=(169, 99, 49))
-        self.btn_sel_pack = Button(0, 0, 80, 40, "Pack", self.set_tile, "Douar", 
-                                   color=TILE_COLORS["Douar"], hover_color=(50, 50, 50))
-        self.btn_sel_charge = Button(0, 0, 80, 40, "Charge", self.set_tile, "DroneBase", 
-                                     color=TILE_COLORS["DroneBase"], hover_color=(255, 170, 30))
-        self.btn_clear_map = Button(0, 0, 250, 40, "Clear All", self.clear_map, color=(150, 50, 50))
+        
+        # Row 1 buttons
+        self.btn_sel_shelf = Button(0, 0, 80, 40, "Pharmacy", self.set_tile, "Pharmacy", color=TILE_COLORS["Pharmacy"])
+        self.btn_sel_pack = Button(0, 0, 80, 40, "Pack", self.set_tile, "Douar", color=TILE_COLORS["Douar"])
+        self.btn_sel_charge = Button(0, 0, 80, 40, "Charge", self.set_tile, "DroneBase", color=TILE_COLORS["DroneBase"])
+        
+        # Row 2 buttons (New Obstacle Button)
+        self.btn_sel_obs = Button(0, 0, 120, 40, "Obstacle", self.set_tile, "Obstacle", color=TILE_COLORS["Obstacle"])
+        self.btn_clear_map = Button(0, 0, 120, 40, "Clear All", self.clear_map, color=(150, 50, 50))
+        
         self.btn_launch = Button(0, 0, 250, 40, "Save and Launch", self.save_and_launch, color=COLOR_BUTTON_EDIT)
         self.editor_buttons = [self.btn_editor_back, self.btn_sel_shelf, self.btn_sel_pack, self.btn_sel_charge, 
-                              self.btn_clear_map, self.btn_launch]
+                              self.btn_sel_obs, self.btn_clear_map, self.btn_launch]
 
     def update_layout(self, w, h):
         self.window_w, self.window_h = w, h
@@ -251,15 +258,22 @@ class AirDwaVisualizer:
         self.btn_faster.rect.topleft = (bx + 130, 330)
         self.btn_fail.rect.topleft = (bx, 390)
         
-        # Editor sidebar
+        # Editor sidebar (Adjusted coordinates for the new rows)
         self.btn_editor_back.rect.topleft = (bx, 140)
         self.slider_width.rect.topleft = (bx, 200)
         self.slider_height.rect.topleft = (bx, 260)
+        
+        # Row 1
         self.btn_sel_shelf.rect.topleft = (bx, 330)
         self.btn_sel_pack.rect.topleft = (bx + 85, 330)
         self.btn_sel_charge.rect.topleft = (bx + 170, 330)
-        self.btn_clear_map.rect.topleft = (bx, 390)
-        self.btn_launch.rect.topleft = (bx, 450)
+        
+        # Row 2
+        self.btn_sel_obs.rect.topleft = (bx, 380)
+        self.btn_clear_map.rect.topleft = (bx + 130, 380)
+        
+        # Bottom
+        self.btn_launch.rect.topleft = (bx, 440)
 
         # Calculate grid layout
         if self.state == STATE_MENU:
@@ -436,8 +450,7 @@ class AirDwaVisualizer:
         for x in range(self.model.grid.width):
             for y in range(self.model.grid.height):
                 cell_contents = self.model.grid.get_cell_list_contents((x, y))
-                rect = (self.offset_x + x*self.cell_size, self.offset_y + y*self.cell_size, 
-                       self.cell_size, self.cell_size)
+                rect = (self.offset_x + x*self.cell_size, self.offset_y + y*self.cell_size, self.cell_size, self.cell_size)
                 
                 for agent in cell_contents:
                     agent_type = type(agent).__name__
@@ -453,6 +466,9 @@ class AirDwaVisualizer:
                     elif agent_type == "DroneBaseAgent":
                         pygame.draw.rect(self.screen, (255, 140, 0), rect)
                         pygame.draw.rect(self.screen, (200, 100, 0), rect, 2)
+                    elif agent_type == "ObstacleAgent": # ADD THIS BLOCK
+                        pygame.draw.rect(self.screen, (128, 128, 128), rect)
+                        pygame.draw.rect(self.screen, (100, 100, 100), rect, 1)
 
         # Draw medical supply weights
         for mission in self.model.order_manager.missions:
