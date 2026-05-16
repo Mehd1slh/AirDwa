@@ -252,27 +252,39 @@ class MissionControlAgent(mesa.Agent):
         self.run_auction_allocation(unassigned)
 
     def handle_robot_failure(self, failed_robot, old_state):
-        """ Rescue Logic: If a drone breaks, recover the medical supply and re-issue the task. """
+        """ Patient-First Rescue Logic: Abandon the crashed supply and order a fresh one. """
         mission = failed_robot.current_order
         if not mission:
             return
         
         if old_state == "TO_PICKUP":
-            # Just put it back in the pool
+            # The drone broke before securing the package. Put the mission back in the pool.
             mission.assigned_to = None
             print(f"🔄 Drone {failed_robot.unique_id} failed before pickup. Mission {mission.order_id} re-released.")
             
         elif old_state in ["TO_DELIVER", "TO_CHARGE"]:
-            # Drop the medical supply where the drone died; it must be picked up from there now
-            print(f"🚨 PACKAGE DROPPED! Drone {failed_robot.unique_id} dropped mission {mission.order_id} at {failed_robot.pos}")
-            mission.pickup_pos = failed_robot.pos
+            # The drone broke while carrying the medical supply.
+            print(f"🚨 CRASH DETECTED! Drone {failed_robot.unique_id} crashed at {failed_robot.pos}")
+            print(f"⚠️ Abandoning original package for mission {mission.order_id}. Initiating Patient-First Protocol...")
+            
+            # Find the nearest pharmacy to the PATIENT (dropoff_pos) to minimize wait time
+            nearest_pharmacy = min(
+                self.model.pharmacies, 
+                key=lambda p: abs(p[0] - mission.dropoff_pos[0]) + abs(p[1] - mission.dropoff_pos[1])
+            )
+            
+            # Re-route the mission to pick up fresh supplies from this nearest pharmacy
+            mission.pickup_pos = nearest_pharmacy
             mission.assigned_to = None
             
-            if not str(mission.order_id).startswith("RESCUE_"):
-                mission.order_id = f"RESCUE_{mission.order_id}"
+            if not str(mission.order_id).startswith("URGENT_RESCUE_"):
+                mission.order_id = f"URGENT_RESCUE_{mission.order_id}"
+                
+            print(f"🏥 Fresh supply ordered from Pharmacy at {nearest_pharmacy} for patient at {mission.dropoff_pos}")
 
         failed_robot.current_order = None
         
+        # Instantly run the auction to dispatch a fresh drone
         unassigned = [mission]
         self.run_auction_allocation(unassigned)
 
