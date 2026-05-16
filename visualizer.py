@@ -449,7 +449,7 @@ class AirDwaVisualizer:
                 px = int(self.offset_x + ox * self.cell_size + self.cell_size/2)
                 py = int(self.offset_y + oy * self.cell_size + self.cell_size/2)
                 
-                w_surf = self.font_tiny.render(str(mission.weight), True, COLOR_TEXT_WHITE)
+                w_surf = self.font_tiny.render(str(mission.priority), True, COLOR_TEXT_WHITE)
                 w_rect = w_surf.get_rect(center=(px, py))
                 bg_rect = w_rect.inflate(4, 4)
                 pygame.draw.rect(self.screen, (0, 0, 0, 150), bg_rect, border_radius=2)

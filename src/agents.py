@@ -24,9 +24,9 @@ STATE_FAILED = "FAILED"
 STATE_RETURNING = "RETURNING"
 
 # Physical Constraints
-ROBOT_CAPACITIES = [20, 30, 40]
-MIN_PACKAGE_WEIGHT = 5
-MAX_PACKAGE_WEIGHT = 40
+MIN_PACKAGE_PRIORITY = 1
+MAX_PACKAGE_PRIORITY = 3
+DRONE_SPEEDS = [1, 2, 3]
 
 MEDICINE_DB = {
     "doliprane": 1,    # Routine
@@ -37,17 +37,16 @@ MEDICINE_DB = {
     "antivenom": 3,    # Critical
     "epipen": 3        # Critical
 }
-DRONE_SPEEDS = [1, 2, 3]
 
 
 class Mission:
-    def __init__(self, order_id, pickup_pos, dropoff_pos, medicine_name, priority):
+    """ Represents a delivery task from a pickup location (Pharmacy) to a dropoff location (Douar). """
+    def __init__(self, order_id, pickup_pos, dropoff_pos, priority):
         self.order_id = order_id
-        self.medicine_name = medicine_name
         self.priority = priority
         self.pickup_pos = pickup_pos
         self.dropoff_pos = dropoff_pos
-        self.assigned_to = None
+        self.assigned_to = None 
 
 class DroneAgent(mesa.Agent):
     def __init__(self, unique_id, model, start_pos):
@@ -171,9 +170,11 @@ class DroneAgent(mesa.Agent):
         return min(facilities, key=lambda f: self.euclidean_distance(self.pos, f))
 
     def move_towards(self, target_pos):
-        """ Executes movement, taking drone speed into account. """
+        """ Executes steps toward a goal based on the drone's speed. """
         for _ in range(self.speed):
-            if self.pos == target_pos: return
+            if self.pos == target_pos: 
+                break # Reached destination
+                
             path = self.a_star_search(self.pos, target_pos)
             if path and len(path) > 0:
                 next_step = path[0] 
@@ -252,23 +253,21 @@ class DroneAgent(mesa.Agent):
 
 
     def calculate_auction_bid(self, mission):
-        """ Bid for the Auction: Prioritize fast drones for urgent medicines. """
-        if self.current_order is not None or self.state != STATE_IDLE or self.battery < LOW_BATTERY_THRESHOLD:
+        """ Bid for the Auction mechanism (lower is better, represents 'cost'). """
+        if self.current_order is not None:
+            return float('inf')
+        if self.state != STATE_IDLE or self.battery < LOW_BATTERY_THRESHOLD:
             return float('inf')
         
         dist = self.calculate_distance(mission.pickup_pos)
-        eta = dist / self.speed # Time to pickup
         
-        # --- Speed & Priority Penalty Logic ---
-        priority_penalty = 0
-        if mission.priority == 3 and self.speed < 3:
-            # Huge penalty for trying to send a slow drone for a Critical (Level 3) mission
-            priority_penalty = 1000 * (3 - self.speed)
-        elif mission.priority == 1 and self.speed == 3:
-            # Penalty for wasting a super-fast drone on a routine Doliprane delivery
-            priority_penalty = 200
-            
-        return eta + ((BATTERY_CAPACITY - self.battery) * 0.1) + priority_penalty
+        # Faster drones will have a lower time_cost
+        time_cost = dist / self.speed 
+        
+        # Multiply priority by speed to give fast drones a massive bidding advantage on urgent tasks
+        priority_bonus = mission.priority * self.speed 
+        
+        return time_cost + ((BATTERY_CAPACITY - self.battery) * 0.1) - priority_bonus
 
     def calculate_distance(self, target):
         return self.euclidean_distance(self.pos, target)
@@ -331,15 +330,14 @@ class MissionControlAgent(mesa.Agent):
         self.run_auction_allocation(unassigned)
 
     def create_new_order(self):
-        """ Spawns an mission at a random pharmacy with a target packing station. """
+        """ Spawns a mission at a random pharmacy with a target packing station. """
         pickup = self.model.get_random_health_facility()
         dropoff = self.model.get_random_packing_station()
         if pickup and dropoff:
-            weight = random.randint(MIN_PACKAGE_WEIGHT, MAX_PACKAGE_WEIGHT)
-            new_order = Mission(self.next_order_id, pickup, dropoff, weight)
+            priority = random.randint(MIN_PACKAGE_PRIORITY, MAX_PACKAGE_PRIORITY)
+            new_order = Mission(self.next_order_id, pickup, dropoff, priority)
             self.next_order_id += 1
             self.missions.append(new_order)
-
 
     def run_auction_allocation(self, unassigned_orders):
         """ Allocates tasks by awarding them to the agent with the lowest cost. """
