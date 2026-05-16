@@ -10,8 +10,8 @@ BATTERY_CAPACITY = 100
 BATTERY_DRAIN_MOVE = 1       # Cost per step moved
 BATTERY_DRAIN_IDLE = 0.1     # Cost per step while doing nothing
 CHARGE_RATE = 100            # Amount recovered per step at a station
-LOW_BATTERY_THRESHOLD = 25   # Point at which a drone prioritizes charging
-RECOVERY_TIME = 40           # Steps a drone stays in 'FAILED' state before repair
+LOW_BATTERY_THRESHOLD = 40   # Point at which a drone prioritizes charging
+RECOVERY_TIME = 25           # Steps a drone stays in 'FAILED' state before repair
 
 # Drone States for Finite State Machine (FSM)
 # Drone States for Finite State Machine (FSM)

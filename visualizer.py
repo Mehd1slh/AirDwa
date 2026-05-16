@@ -305,7 +305,10 @@ class AirDwaVisualizer:
     def decrease_speed(self): self.animation_speed = max(0.01, self.animation_speed - 0.05)
     def increase_speed(self): self.animation_speed = min(1.0, self.animation_speed + 0.05)
     def start_with_default(self):
-        self.active_map_data = None
+        # Point directly to your custom map file
+        path = "maps/custom_airdwa0.json"
+        with open(path, "r") as f: 
+            self.active_map_data = json.load(f)
         self.launch_simulation()
 
     def load_saved_map(self):
