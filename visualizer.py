@@ -7,15 +7,15 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from src.model import AirDwaModel
-from src.agents import DroneAgent, PharmacyAgent, DouarAgent, DroneBaseAgent
+from src.agents import DroneAgent, HealthFacilityAgent, DouarAgent, ChargingStationAgent, ObstacleAgent
 
-# Map Editor Constants
-TILE_TYPES = ["Pharmacy", "Douar", "DroneBase", "Obstacle", "Empty"]
+# Map Editor Constants aligned with model.py
+TILE_TYPES = ["HealthFacility", "Douar", "ChargingStation", "Obstacle", "Empty"]
 TILE_COLORS = {
-    "Pharmacy": (46, 204, 113), 
-    "Douar": (52, 152, 219), 
-    "DroneBase": (241, 196, 15), 
-    "Obstacle": (128, 128, 128), # Gray for mountains/hard terrain
+    "HealthFacility": (46, 204, 113),  # Green
+    "Douar": (52, 152, 219),           # Blue
+    "ChargingStation": (241, 196, 15), # Yellow/Orange
+    "Obstacle": (128, 128, 128),       # Gray
     "Empty": (236, 240, 241)
 }
 
@@ -50,8 +50,8 @@ class MapEditor:
         self.width = width
         self.height = height
         self.grid = [["Empty" for _ in range(height)] for _ in range(width)]
-        self.current_selection = "Pharmacy"
-        self.cell_size = 30
+        self.current_selection = "HealthFacility"
+        self.cell_size = 100
         
     def handle_click(self, pos, offset_x, offset_y, right_click=False):
         grid_x = (pos[0] - offset_x) // self.cell_size
@@ -84,20 +84,20 @@ class MapEditor:
         data = {
             "width": self.width,
             "height": self.height,
-            "pharmacies": [],
+            "pharmacies": [], 
             "douars": [],
-            "drone_bases": [],
-            "obstacles": [] # Added obstacles array
+            "telecom_stations": [], 
+            "obstacles": []
         }
         for x in range(self.width):
             for y in range(self.height):
                 tile = self.grid[x][y]
-                if tile == "Pharmacy": 
+                if tile == "HealthFacility": 
                     data["pharmacies"].append([x, y])
                 elif tile == "Douar": 
                     data["douars"].append([x, y])
-                elif tile == "DroneBase": 
-                    data["drone_bases"].append([x, y])
+                elif tile == "ChargingStation": 
+                    data["telecom_stations"].append([x, y])
                 elif tile == "Obstacle": 
                     data["obstacles"].append([x, y])
         
@@ -226,17 +226,17 @@ class AirDwaVisualizer:
         self.slider_width = Slider(0, 0, 250, 10, 50, self.grid_width, "Width")
         self.slider_height = Slider(0, 0, 250, 10, 50, self.grid_height, "Height")
         
-        # Row 1 buttons
-        self.btn_sel_shelf = Button(0, 0, 80, 40, "Pharmacy", self.set_tile, "Pharmacy", color=TILE_COLORS["Pharmacy"])
-        self.btn_sel_pack = Button(0, 0, 80, 40, "Pack", self.set_tile, "Douar", color=TILE_COLORS["Douar"])
-        self.btn_sel_charge = Button(0, 0, 80, 40, "Charge", self.set_tile, "DroneBase", color=TILE_COLORS["DroneBase"])
+        # Row 1 buttons (Aligned with new agents)
+        self.btn_sel_health = Button(0, 0, 80, 40, "Health", self.set_tile, "HealthFacility", color=TILE_COLORS["HealthFacility"])
+        self.btn_sel_douar = Button(0, 0, 80, 40, "Douar", self.set_tile, "Douar", color=TILE_COLORS["Douar"])
+        self.btn_sel_charge = Button(0, 0, 80, 40, "Charge", self.set_tile, "ChargingStation", color=TILE_COLORS["ChargingStation"])
         
-        # Row 2 buttons (New Obstacle Button)
+        # Row 2 buttons
         self.btn_sel_obs = Button(0, 0, 120, 40, "Obstacle", self.set_tile, "Obstacle", color=TILE_COLORS["Obstacle"])
         self.btn_clear_map = Button(0, 0, 120, 40, "Clear All", self.clear_map, color=(150, 50, 50))
         
         self.btn_launch = Button(0, 0, 250, 40, "Save and Launch", self.save_and_launch, color=COLOR_BUTTON_EDIT)
-        self.editor_buttons = [self.btn_editor_back, self.btn_sel_shelf, self.btn_sel_pack, self.btn_sel_charge, 
+        self.editor_buttons = [self.btn_editor_back, self.btn_sel_health, self.btn_sel_douar, self.btn_sel_charge, 
                               self.btn_sel_obs, self.btn_clear_map, self.btn_launch]
 
     def update_layout(self, w, h):
@@ -264,8 +264,8 @@ class AirDwaVisualizer:
         self.slider_height.rect.topleft = (bx, 260)
         
         # Row 1
-        self.btn_sel_shelf.rect.topleft = (bx, 330)
-        self.btn_sel_pack.rect.topleft = (bx + 85, 330)
+        self.btn_sel_health.rect.topleft = (bx, 330)
+        self.btn_sel_douar.rect.topleft = (bx + 85, 330)
         self.btn_sel_charge.rect.topleft = (bx + 170, 330)
         
         # Row 2
@@ -458,8 +458,8 @@ class AirDwaVisualizer:
     def draw_simulation(self):
         self.screen.fill(COLOR_BG)
         self.draw_grid_lines()
-        
-        # Draw static agents - FIXED: Draw on all cells, checking agent type by class name
+
+        # Draw static agents
         for x in range(self.model.grid.width):
             for y in range(self.model.grid.height):
                 cell_contents = self.model.grid.get_cell_list_contents((x, y))
@@ -468,19 +468,17 @@ class AirDwaVisualizer:
                 for agent in cell_contents:
                     agent_type = type(agent).__name__
                     
-                    if agent_type == "PharmacyAgent":
-                        col = pygame.Color(getattr(agent, "color", "brown"))
-                        pygame.draw.rect(self.screen, col, rect)
-                        pygame.draw.rect(self.screen, (50, 50, 50), rect, 1)
+                    if agent_type == "HealthFacilityAgent":
+                        pygame.draw.rect(self.screen, TILE_COLORS["HealthFacility"], rect)
+                        pygame.draw.rect(self.screen, (30, 150, 80), rect, 1)
                     elif agent_type == "DouarAgent":
-                        col = pygame.Color(getattr(agent, "color", "black"))
-                        pygame.draw.rect(self.screen, col, rect)
-                        pygame.draw.rect(self.screen, (80, 80, 80), rect, 1)
-                    elif agent_type == "DroneBaseAgent":
-                        pygame.draw.rect(self.screen, (255, 140, 0), rect)
-                        pygame.draw.rect(self.screen, (200, 100, 0), rect, 2)
-                    elif agent_type == "ObstacleAgent": # ADD THIS BLOCK
-                        pygame.draw.rect(self.screen, (128, 128, 128), rect)
+                        pygame.draw.rect(self.screen, TILE_COLORS["Douar"], rect)
+                        pygame.draw.rect(self.screen, (40, 120, 180), rect, 1)
+                    elif agent_type == "ChargingStationAgent":
+                        pygame.draw.rect(self.screen, TILE_COLORS["ChargingStation"], rect)
+                        pygame.draw.rect(self.screen, (200, 150, 10), rect, 2)
+                    elif agent_type == "ObstacleAgent": 
+                        pygame.draw.rect(self.screen, TILE_COLORS["Obstacle"], rect)
                         pygame.draw.rect(self.screen, (100, 100, 100), rect, 1)
 
         # Draw medical supply weights

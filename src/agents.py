@@ -313,7 +313,7 @@ class MissionControlAgent(mesa.Agent):
 
     def create_new_order(self):
         """ Spawns an mission at a random pharmacy with a target packing station. """
-        pickup = self.model.get_random_shelf()
+        pickup = self.model.get_random_health_facility()
         dropoff = self.model.get_random_packing_station()
         if pickup and dropoff:
             weight = random.randint(MIN_PACKAGE_WEIGHT, MAX_PACKAGE_WEIGHT)

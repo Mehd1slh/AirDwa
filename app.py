@@ -73,7 +73,7 @@ if st.session_state.phase == 1:
             
             width_meters = haversine_distance(bbox[0], bbox[1], bbox[0], bbox[3])
             height_meters = haversine_distance(bbox[0], bbox[1], bbox[2], bbox[1])
-            grid_w, grid_h = math.ceil(width_meters / 30.0), math.ceil(height_meters / 30.0)
+            grid_w, grid_h = math.ceil(width_meters / 100.0), math.ceil(height_meters / 100.0)
             
             if grid_w > 2000 or grid_h > 2000:
                 st.error("🚨 Box exceeds max size (60x60km)!")
@@ -116,12 +116,16 @@ elif st.session_state.phase == 2:
         # Render the detected grid points as colored dots
         # (We exclude obstacles here so the browser doesn't crash rendering 100k+ mountain points)
         colors = {"drone_bases": "red", "pharmacies": "green", "douars": "blue", "telecom_stations": "purple"}
+        
         for category, color in colors.items():
-            for pt in st.session_state.map_data[category]:
+            for pt in st.session_state.map_data.get(category, []):
                 lat, lon = grid_to_latlon(pt[0], pt[1], bbox, grid_w, grid_h)
                 folium.CircleMarker(
-                    location=[lat, lon], radius=5, color=color, fill=True, fill_opacity=0.9,
-                    tooltip=f"{category.title()} (Grid: {pt[0]}, {pt[1]})"
+                    location=[lat, lon], 
+                    radius=3, # Reduced from 5 for faster rendering
+                    color=color, 
+                    fill=True, 
+                    fill_opacity=0.9
                 ).add_to(m2)
         
         # Add the single "Pin Drop" tool
@@ -152,12 +156,19 @@ elif st.session_state.phase == 2:
                 st.markdown(f"**Coordinates:**\nLat: `{draw_lat:.4f}` | Lon: `{draw_lon:.4f}`\n\n**Grid Array Target:** `[{grid_x}, {grid_y}]`")
                 
                 with st.form("add_point_form"):
-                    cell_type = st.selectbox("Assign Category:", ["douars", "drone_bases", "pharmacies", "telecom_stations"])
+                    # ALIGNMENT: Map friendly UI names to the exact JSON array keys expected by model.py
+                    category_map = {
+                        "⚕️ Health Facility (Hospital/Pharmacy)": "pharmacies",
+                        "🏠 Douar (Delivery Target)": "douars",
+                        "⚡ Charging Station (Telecom Tower)": "telecom_stations",
+                        "⛰️ Obstacle (Mountain/No-Fly)": "obstacles"
+                    }
+                    ui_choice = st.selectbox("Assign Category:", list(category_map.keys()))
+                    cell_type = category_map[ui_choice]
                     
                     if st.form_submit_button("➕ Add to Matrix"):
                         if [grid_x, grid_y] not in st.session_state.map_data[cell_type]:
                             st.session_state.map_data[cell_type].append([grid_x, grid_y])
-                            # Rerun forces the map to reload, wiping the temporary pin and drawing a permanent colored circle
                             st.rerun() 
                         else:
                             st.warning("Point already exists.")
@@ -167,13 +178,22 @@ elif st.session_state.phase == 2:
         st.divider()
         st.subheader("Export System")
         json_str = json.dumps(st.session_state.map_data, indent=4)
+        
+        # 1. Standard browser download (Optional)
         st.download_button(
-            label="💾 Download map.json",
+            label="💾 Download map.json to computer",
             data=json_str,
             file_name="custom_airdwa_map.json",
             mime="application/json",
             type="primary"
         )
+        
+        # 2. NEW: Save directly to the local folder for Pygame
+        if st.button("🚀 Save as 'Last Saved Map' for Visualizer"):
+            os.makedirs("maps", exist_ok=True)
+            with open("maps/custom_airdwa.json", "w") as f:
+                json.dump(st.session_state.map_data, f, indent=4)
+            st.success("✅ Map successfully saved to maps/custom_airdwa.json! You can now launch Pygame and click 'Load Last Saved Map'.")
         
         if st.button("🔄 Discard & Start Over"):
             st.session_state.phase = 1

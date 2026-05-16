@@ -3,3 +3,4 @@
 /pretrained_models
 bbox_selector.html
 .env
+__pycache__/
