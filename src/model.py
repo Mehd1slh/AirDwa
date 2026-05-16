@@ -1,6 +1,6 @@
 import mesa
 import random
-from agents import DroneAgent, HealthFacilityAgent, DouarAgent, ChargingStationAgent, MissionControlAgent, ObstacleAgent
+from .agents import DroneAgent, HealthFacilityAgent, DouarAgent, ChargingStationAgent, MissionControlAgent, ObstacleAgent
 
 # Default environment constants
 GRID_WIDTH = 20
@@ -45,9 +45,9 @@ class AirDwaModel(mesa.Model):
         
         # References for internal management and data collection
         self.drone_agents = []
-        self.health_facilities = [] # Replaces pharmacies & drone_bases
+        self.health_facilities = [] 
         self.douars = []
-        self.charging_stations = [] # Replaces telecom_stations
+        self.charging_stations = [] 
         self.obstacles = []
         
         # Initialize the environment structure
@@ -89,26 +89,29 @@ class AirDwaModel(mesa.Model):
             self.fail_random_robot()
 
     def _init_airdwa_layout(self):
-        """ Default layout generator: places pharmacies in columns and stations at boundaries. """
-        # Pharmacies: Organized in vertical clusters
+        """ Default layout generator: places facilities in columns and stations at boundaries. """
+        # Health Facilities: Organized in vertical clusters
         for x in range(3, GRID_WIDTH - 2, 3): 
             for y in range(2, GRID_HEIGHT - 2):
                 pos = (x, y)
-                self.pharmacies.append(pos)
-                pharmacy = PharmacyAgent(f"Shelf_{x}_{y}", self)
-                self.grid.place_agent(pharmacy, pos)
+                self.health_facilities.append(pos)
+                facility = HealthFacilityAgent(f"Health_{x}_{y}", self)
+                self.grid.place_agent(facility, pos)
         
-        # Packing Stations: Placed along the left wall
+        # Packing Stations (Douars): Placed along the left wall
+        station_counter = 1
         for y in range(0, GRID_HEIGHT, 2):
             pos = (0, y)
             self.douars.append(pos)
-            station = DouarAgent(f"Pack_{0}_{y}", self)
+            station = DouarAgent(f"Pack_{0}_{y}", self, station_id=station_counter)
             self.grid.place_agent(station, pos)
+            station_counter += 1
 
         # Charging Stations: Placed at fixed corners
-        self.drone_bases = [(GRID_WIDTH-1, GRID_HEIGHT-1), (GRID_WIDTH-1, 0)]
-        for i, pos in enumerate(self.drone_bases):
-            charger = DroneBaseAgent(f"Charge_{i}", self)
+        corner_bases = [(GRID_WIDTH-1, GRID_HEIGHT-1), (GRID_WIDTH-1, 0)]
+        for i, pos in enumerate(corner_bases):
+            self.charging_stations.append(pos)
+            charger = ChargingStationAgent(f"Charge_{i}", self)
             self.grid.place_agent(charger, pos)
 
     def _load_custom_layout(self, data):
@@ -121,10 +124,12 @@ class AirDwaModel(mesa.Model):
             self.grid.place_agent(facility, (x, y))
             self.health_facilities.append((x, y))
             
+        station_counter = 1
         for x, y in data.get("douars", []):
-            station = DouarAgent(f"Pack_{x}_{y}", self)
+            station = DouarAgent(f"Pack_{x}_{y}", self, station_id=station_counter)
             self.grid.place_agent(station, (x, y))
             self.douars.append((x, y))
+            station_counter += 1
             
         # Telecom Stations act as chargers
         for x, y in data.get("telecom_stations", []):
@@ -168,6 +173,16 @@ class AirDwaModel(mesa.Model):
                     return False # Treat other drones as obstacles to prevent stacking unless it's a Douar
 
         return True
+    
+    def get_douar_by_station_id(self, station_id):
+        """ Searches the grid to find a DouarAgent with the matching station ID. """
+        for pos in self.douars:
+            cell_contents = self.grid.get_cell_list_contents(pos)
+            for agent in cell_contents:
+                # Ensure we handle integers and strings properly
+                if isinstance(agent, DouarAgent) and str(agent.station_id) == str(station_id):
+                    return pos
+        return None
 
     def fail_random_robot(self):
         """ Injects a fault into the system by picking an active drone and triggering its failure state. """
