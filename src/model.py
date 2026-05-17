@@ -125,8 +125,15 @@ class AirDwaModel(mesa.Model):
             self.health_facilities.append((x, y))
             
         station_counter = 1
-        for x, y in data.get("douars", []):
-            station = DouarAgent(f"Pack_{x}_{y}", self, station_id=station_counter)
+        for entry in data.get("douars", []):
+            # Support both the old [x, y] format and the new {"id", "x", "y"} format
+            if isinstance(entry, dict):
+                x, y = entry["x"], entry["y"]
+                sid = entry.get("id", station_counter)
+            else:
+                x, y = entry
+                sid = station_counter
+            station = DouarAgent(f"Pack_{x}_{y}", self, station_id=sid)
             self.grid.place_agent(station, (x, y))
             self.douars.append((x, y))
             station_counter += 1

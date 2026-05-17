@@ -29,23 +29,65 @@ MAX_PACKAGE_PRIORITY = 3
 DRONE_SPEEDS = [1, 2, 3]
 
 MEDICINE_DB = {
-    "doliprane": 1,    # Routine
-    "antibiotic": 1,   # Routine
-    "insulin": 2,      # Urgent
-    "inhaler": 2,      # Urgent
-    "blood": 3,        # Critical
-    "antivenom": 3,    # Critical
-    "epipen": 3        # Critical
+    # ── Routine (Priority 1) ──────────────────────────────────────────────────
+    "doliprane": 1,        # Darija/French trade name for paracetamol
+    "paracetamol": 1,      # English/international name
+    "paracétamol": 1,      # French spelling
+    "dalidol": 1,          # Common Moroccan brand
+    "antibiotic": 1,       # Generic English term
+    "antibiotique": 1,     # French/Darija term
+    "amoxicillin": 1,      # Common antibiotic
+    "amoxicilline": 1,     # French spelling
+    "augmentin": 1,        # Brand name antibiotic common in Morocco
+    "antalgique": 1,       # Darija/French: pain reliever
+    "aspirine": 1,         # Aspirin (French spelling, common in Darija)
+    "aspirin": 1,
+    "vitamines": 1,        # Vitamins
+    "vitamin": 1,
+    "comprime": 1,         # Generic tablet/pill reference
+    "antiparasitaire": 1,  # Antiparasitic
+
+    # ── Urgent (Priority 2) ───────────────────────────────────────────────────
+    "insulin": 2,          # English
+    "insuline": 2,         # French/Darija
+    "inhaler": 2,          # English
+    "inhalateur": 2,       # French
+    "pompe": 2,            # Darija: literally "pump" (asthma inhaler)
+    "ventoline": 2,        # Brand-name inhaler common in Morocco
+    "salbutamol": 2,       # Generic name for Ventolin
+    "antihypertenseur": 2, # Blood pressure medication
+    "antihypertensive": 2,
+    "cardioaspirin": 2,    # Cardiac aspirin
+    "diazepam": 2,         # Sedative
+    "metformin": 2,        # Diabetes medication
+    "metformine": 2,
+
+    # ── Critical (Priority 3) ─────────────────────────────────────────────────
+    "blood": 3,            # Blood / blood product
+    "sang": 3,             # French/Darija for blood
+    "plasma": 3,           # Blood plasma
+    "antivenom": 3,        # Snake/scorpion antivenom
+    "antivenin": 3,        # French variant
+    "serum": 3,            # Antivenom serum (common Darija shorthand)
+    "epipen": 3,           # Epinephrine auto-injector
+    "epinephrine": 3,      # Generic name
+    "adrenaline": 3,       # Alternative name (common in French-speaking contexts)
+    "adrénaline": 3,       # French spelling
+    "morphine": 3,         # Strong painkiller / post-trauma
+    "naloxone": 3,         # Opioid overdose reversal
+    "defibrillateur": 3,   # Defibrillator pads/gel (emergency)
+    "glucagon": 3,         # Severe hypoglycemia kit
 }
 
 
 class Mission:
     """ Represents a delivery task from a pickup location (Pharmacy) to a dropoff location (Douar). """
-    def __init__(self, order_id, pickup_pos, dropoff_pos, priority):
+    def __init__(self, order_id, pickup_pos, dropoff_pos, priority, medicine_name=None):
         self.order_id = order_id
         self.priority = priority
         self.pickup_pos = pickup_pos
         self.dropoff_pos = dropoff_pos
+        self.medicine_name = medicine_name  # Set for voice-dispatched orders; None for auto-generated
         self.assigned_to = None 
 
 class DroneAgent(mesa.Agent):
@@ -387,7 +429,7 @@ class MissionControlAgent(mesa.Agent):
         pickup_pos = self.model.get_random_health_facility()
         
         if pickup_pos and dropoff_pos:
-            new_order = Mission(self.next_order_id, pickup_pos, dropoff_pos, medicine_name, priority)
+            new_order = Mission(self.next_order_id, pickup_pos, dropoff_pos, priority, medicine_name=medicine_name)
             self.next_order_id += 1
             self.missions.append(new_order)
             print(f"🎙️ VOICE COMMAND ACCEPTED: Dispatching {medicine_name} (Priority {priority}) to Station {station_id}")
@@ -430,4 +472,4 @@ class ObstacleAgent(mesa.Agent):
     def __init__(self, unique_id, model):
         super().__init__(model)
         self.type_name = "Obstacle"
-        self.color = "#808080" 
+        self.color = "#808080"
