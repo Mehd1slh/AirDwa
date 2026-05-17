@@ -1,6 +1,7 @@
 import gradio as gr
 import torch
 import json
+import re
 import requests
 from transformers import pipeline
 
@@ -30,8 +31,7 @@ def extract_with_llm(transcription):
     """Sends the transcribed Darija/French text to local Qwen3 via Ollama."""
 
     messages = [
-        {"role": "system", "content": """/no_think
-You are an AI assistant for a drone medical dispatch system in Morocco.
+        {"role": "system", "content": """You are an AI assistant for a drone medical dispatch system in Morocco.
 The user speaks in Darija or French to request a medicine delivery to a numbered station.
 
 Map the medicine to one of these lowercase English keys:
@@ -61,18 +61,30 @@ Example: {"medicine": "antivenom", "station": "3"}"""},
                 "model": OLLAMA_MODEL,
                 "messages": messages,
                 "stream": False,
+                "think": False,                                    # Ollama-native: disable Qwen3 thinking
                 "options": {"temperature": 0.1, "num_predict": 60}
             },
             timeout=30
         )
         resp.raise_for_status()
-        response_text = resp.json()["message"]["content"].strip()
+        payload = resp.json()
+        response_text = payload["message"]["content"].strip()
+
+        if not response_text:
+            print(f"⚠️  Empty content from Ollama. Full payload: {payload}")
+            return "Extraction Failed", "Extraction Failed"
+
+        # Strip <think>…</think> blocks if the model leaked one anyway
+        response_text = re.sub(r"<think>.*?</think>", "", response_text, flags=re.DOTALL).strip()
 
         # Strip accidental markdown fences
         if response_text.startswith("```"):
             response_text = response_text.split("```")[1]
             if response_text.startswith("json"):
                 response_text = response_text[4:]
+        response_text = response_text.strip()
+
+        print(f"🤖 Qwen3 raw response: {response_text!r}")
 
         data = json.loads(response_text)
         return str(data.get("medicine", "Unknown")).lower(), str(data.get("station", "Unknown"))

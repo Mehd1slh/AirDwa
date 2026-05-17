@@ -38,7 +38,7 @@ if "map_data" not in st.session_state:
 if "builder_params" not in st.session_state:
     st.session_state.builder_params = None
 
-st.title("🚁 AirDwa: Custom Simulation Map Generator")
+st.title("AirDwa: Custom Simulation Map Generator")
 
 # ==========================================
 # PHASE 1: SELECTION & GENERATION
@@ -76,7 +76,7 @@ if st.session_state.phase == 1:
             grid_w, grid_h = math.ceil(width_meters / 100.0), math.ceil(height_meters / 100.0)
             
             if grid_w > 2000 or grid_h > 2000:
-                st.error("🚨 Box exceeds max size (60x60km)!")
+                st.error("Box exceeds max size (60x60km)!")
             elif not api_key:
                 st.error("Missing OpenTopography API Key.")
             else:
@@ -248,14 +248,14 @@ elif st.session_state.phase == 2:
         json_str = json.dumps(st.session_state.map_data, indent=4)
         
         st.download_button(
-            label="💾 Download map.json to computer",
+            label="Download map.json to computer",
             data=json_str,
             file_name="custom_airdwa_map.json",
             mime="application/json",
             type="primary"
         )
         
-        if st.button("🚀 Save as 'Last Saved Map' for Visualizer"):
+        if st.button("Save as 'Last Saved Map' for Visualizer"):
             os.makedirs("maps", exist_ok=True)
             with open("maps/custom_airdwa.json", "w") as f:
                 json.dump(st.session_state.map_data, f, indent=4)

@@ -12,7 +12,7 @@ from src.agents import MEDICINE_DB
 OLLAMA_URL   = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "qwen3:1.7b"   # exactly as shown by `ollama list`
 
-print("🚁 Starting AirDwa Global System...")
+print("Starting AirDwa Global System...")
 
 # ==========================================
 # 1. INITIALIZE AIRDWA SIMULATION
@@ -48,8 +48,7 @@ def extract_with_llm(transcription):
     known_medicines = ", ".join(sorted(set(MEDICINE_DB.keys())))
 
     messages = [
-        {"role": "system", "content": f"""/no_think
-You are an AI assistant for a drone medical dispatch system in Morocco.
+        {"role": "system", "content": f"""You are an AI assistant for a drone medical dispatch system in Morocco.
 The user will speak in Darija (Moroccan Arabic) or French to request a medicine delivery to a numbered station.
 
 Your job:
@@ -81,18 +80,33 @@ Do not include any other text, markdown, or explanation."""},
                 "model": OLLAMA_MODEL,
                 "messages": messages,
                 "stream": False,
+                "think": False,                                    # Ollama-native: disable Qwen3 thinking
                 "options": {"temperature": 0.1, "num_predict": 60}
             },
             timeout=30
         )
         resp.raise_for_status()
-        response_text = resp.json()["message"]["content"].strip()
+        payload = resp.json()
+        response_text = payload["message"]["content"].strip()
 
-        # Strip any accidental markdown fences
+        # Fallback: if content is empty, Ollama put everything in 'thinking' — shouldn't
+        # happen with think=False but guard anyway
+        if not response_text:
+            print(f"Empty content from Ollama. Full payload: {payload}")
+            return "Unknown", "Unknown"
+
+        # Strip <think>…</think> blocks if the model leaked one anyway
+        import re
+        response_text = re.sub(r"<think>.*?</think>", "", response_text, flags=re.DOTALL).strip()
+
+        # Strip accidental markdown fences
         if response_text.startswith("```"):
             response_text = response_text.split("```")[1]
             if response_text.startswith("json"):
                 response_text = response_text[4:]
+        response_text = response_text.strip()
+
+        print(f"Qwen3 raw response: {response_text!r}")
 
         data = json.loads(response_text)
         return str(data.get("medicine", "Unknown")).lower(), str(data.get("station", "Unknown"))
@@ -148,11 +162,11 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
             submit_btn = gr.Button("Dispatch Drone", variant="primary")
             
         with gr.Column():
-            out_transcript = gr.Textbox(label="📝 Whisper Transcription")
+            out_transcript = gr.Textbox(label="Whisper Transcription")
             with gr.Row():
-                out_med = gr.Textbox(label="💊 Medicament")
-                out_station = gr.Textbox(label="📍 Target Station")
-            out_status = gr.Textbox(label="💻 Simulation Status")
+                out_med = gr.Textbox(label="Medicament")
+                out_station = gr.Textbox(label="Target Station")
+            out_status = gr.Textbox(label="Simulation Status")
             
     submit_btn.click(
         fn=process_voice_command, 
